@@ -16,9 +16,15 @@ py -3.9 -m venv .venv
 ```
 
 If `.venv` is already present, run the last command only. Open
-http://127.0.0.1:8001/cre/login . Health: http://127.0.0.1:8001/health .
+http://127.0.0.1:8501/cre/login . Health: http://127.0.0.1:8501/health .
 The main backend can continue on port 8000. For another port:
 `python server.py --port 8002`. For development reload: `python server.py --reload`.
+
+Deployment start command (port 8501):
+
+```bash
+python server.py --host 0.0.0.0 --port 8501
+```
 
 ## Database and configuration
 
