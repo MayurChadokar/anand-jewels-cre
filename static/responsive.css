@@ -1,0 +1,196 @@
+/* Shared tablet layout, including iPad Pro in landscape (1366px). */
+.main-content {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+}
+
+.main-content .row > *,
+.main-content .card,
+.main-content .tab-content,
+.navbar-brand {
+    min-width: 0;
+}
+
+.main-content h1,
+.main-content .list-group-item,
+.main-content .alert {
+    overflow-wrap: anywhere;
+}
+
+.table-responsive {
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+}
+
+.cre-side-nav .cre-nav-label { white-space: normal; }
+
+body.cre-sidebar-collapsed #desktopSidebar {
+    max-width: 76px !important;
+}
+
+body.cre-sidebar-collapsed #desktopSidebar .nav-link {
+    justify-content: center;
+}
+
+.cre-login-column { max-width: 480px; }
+.cre-login main { min-height: 100dvh !important; }
+.cre-login img { max-width: 100% !important; }
+
+@media (max-width: 1399.98px) {
+    #desktopSidebar { display: none !important; }
+
+    .navbar > .container-fluid {
+        flex-wrap: nowrap;
+        gap: .5rem;
+        padding-inline: 1rem;
+    }
+
+    .navbar-brand {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-right: auto;
+    }
+
+    .navbar-brand img {
+        height: 52px !important;
+        max-width: 180px;
+        object-fit: contain;
+    }
+
+    .navbar-text {
+        max-width: 190px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .main-content {
+        padding: 1.5rem !important;
+    }
+
+    .main-content .btn,
+    .navbar .btn,
+    .navbar-toggler,
+    .modal .btn,
+    #mobileSidebar .btn,
+    #mobileSidebar .btn-close,
+    .modal .btn-close,
+    .page-link,
+    .report-tabs .nav-link {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    .main-content .btn,
+    .modal .btn {
+        line-height: 1.25;
+        white-space: normal;
+    }
+
+    .form-control,
+    .form-select {
+        min-width: 0;
+        min-height: 44px;
+        font-size: 16px;
+    }
+
+    input[type="date"] {
+        max-width: 100%;
+        -webkit-appearance: none;
+    }
+
+    .form-check-input { width: 1.25rem; height: 1.25rem; }
+    .form-check-label { min-height: 32px; }
+
+    .cre-visit-filters {
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        flex: 1 0 100%;
+        width: 100%;
+    }
+
+    .cre-visit-filters .form-control,
+    .cre-visit-filters .form-select {
+        width: 100% !important;
+    }
+
+    .report-tabs {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .report-tabs .nav-item { flex: 0 0 auto; }
+    .report-tabs .nav-link { white-space: nowrap; }
+
+    /* Keep fields readable instead of squeezing six columns into a tablet row. */
+    .report-filters .row > *,
+    #reportTabsContent form .row > * {
+        flex: 0 0 auto;
+        width: 50%;
+    }
+
+    .cre-add-customer-modal .row > [class*="col-md-"] {
+        width: 50%;
+    }
+
+    .modal .modal-dialog {
+        width: calc(100% - 2rem);
+        max-width: 800px;
+        margin: 1rem auto;
+    }
+
+    .modal .modal-content {
+        max-height: calc(100vh - 2rem);
+        max-height: calc(100dvh - 2rem);
+    }
+
+    .cre-add-customer-modal .modal-content > form {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .modal .modal-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-y: contain;
+    }
+
+    .modal .modal-header,
+    .modal .modal-footer { flex-shrink: 0; }
+    .modal .modal-header { align-items: flex-start; }
+
+    .main-content .pagination { flex-wrap: wrap; gap: .25rem; }
+}
+
+@media (min-width: 768px) and (max-width: 1199.98px) {
+    .navbar-brand small { display: none !important; }
+
+    /* Summary tables need more space than the desktop three-column layout. */
+    #overview-panel > .row > [class*="col-lg-"] {
+        width: 100%;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .main-content { padding: 1rem !important; }
+    .navbar > .container-fluid { padding-inline: .5rem; }
+    .navbar-brand img { height: 46px !important; max-width: 160px; }
+    .main-content h1 { font-size: 1.4rem; }
+    .report-actions { width: 100%; }
+    .report-actions .btn { flex: 1 1 100%; }
+    .cre-visit-filters { grid-template-columns: minmax(0, 1fr); }
+    .report-filters .row > *,
+    #reportTabsContent form .row > *,
+    .cre-add-customer-modal .row > [class*="col-md-"] { width: 100%; }
+    .modal .modal-dialog { width: calc(100% - 1rem); margin: .5rem auto; }
+    .modal .modal-content { max-height: calc(100dvh - 1rem); }
+    .modal .modal-body { padding: 1rem; }
+}

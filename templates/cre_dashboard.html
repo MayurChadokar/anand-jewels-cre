@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+
+{% block title %}CRE Dashboard - Anand Jewels{% endblock %}
+
+{% block content %}
+<style>
+    .cre-stat { border: 0; border-radius: 14px; box-shadow: 0 4px 18px rgba(28, 35, 48, .07); height: 100%; }
+    .cre-stat .stat-value { font-size: 1.8rem; font-weight: 750; line-height: 1.1; }
+    .cre-stat .stat-label { color: #697386; font-size: .88rem; }
+    .cre-table th { white-space: nowrap; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: #697386; }
+    .cre-table td { vertical-align: middle; }
+    .cre-visits-scroll { max-height: min(65vh, 700px); overflow: auto; }
+    .cre-visits-scroll .cre-table thead th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; }
+    .cre-status-form { min-width: 0; }
+    .cre-status-form textarea { min-height: 72px; }
+    .cre-dynamic-cell { min-width: 120px; max-width: 220px; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .cre-customer-name { min-width: 170px; }
+    .cre-remark { max-width: 170px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .cre-table .badge { font-size: .75rem; }
+    .cre-customer-submit-footer { position: sticky; bottom: 0; z-index: 2; background: #fff; border-top: 1px solid #e9ecef; }
+    .cre-add-customer-modal .modal-dialog { max-height: calc(100vh - 2rem); }
+    .cre-add-customer-modal .modal-content { max-height: calc(100vh - 2rem); }
+    .cre-add-customer-modal .modal-body { max-height: calc(100vh - 10rem); overflow-y: auto; overscroll-behavior: contain; }
+    .cre-view-data dt { color: #697386; font-size: .78rem; font-weight: 600; }
+    .cre-view-data dd { overflow-wrap: anywhere; white-space: pre-wrap; }
+</style>
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div>
+        <div class="text-uppercase small fw-semibold text-danger mb-1">Anand Jewels</div>
+        <h1 class="h3 mb-1">Customer Relations Dashboard</h1>
+        <p class="text-muted mb-0">Welcome, {{ user.display_name or user.username }}. Manage customer visits and outcomes.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        {% if can_add_customer %}
+        <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#addCustomerModal">
+            <i class="bi bi-person-plus me-1"></i> Add Walk-in Customer
+        </button>
+        {% elif can_manage %}
+        <a class="btn btn-danger" href="/cre/products"><i class="bi bi-plus-lg me-1"></i>Add a Product First</a>
+        {% else %}
+        <button class="btn btn-outline-secondary" type="button" disabled>No products yet — ask a Manager to add one</button>
+        {% endif %}
+    </div>
+</div>
+
+{% if message %}<div class="alert alert-success alert-dismissible fade show" role="alert"><i class="bi bi-check-circle me-2"></i>{{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>{% endif %}
+{% if error %}<div class="alert alert-danger alert-dismissible fade show" role="alert"><i class="bi bi-exclamation-circle me-2"></i>{{ error }}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>{% endif %}
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-xl-3"><div class="card cre-stat"><div class="card-body"><div class="stat-value">{{ total_visits }}</div><div class="stat-label mt-2">Customer visits</div></div></div></div>
+    <div class="col-6 col-xl-3"><div class="card cre-stat"><div class="card-body"><div class="stat-value text-warning">{{ draft_count }}</div><div class="stat-label mt-2">Draft</div></div></div></div>
+    <div class="col-6 col-xl-3"><div class="card cre-stat"><div class="card-body"><div class="stat-value text-success">{{ billed_count }}</div><div class="stat-label mt-2">Billed</div></div></div></div>
+    <div class="col-6 col-xl-3"><div class="card cre-stat"><div class="card-body"><div class="stat-value text-secondary">{{ sales_people_count }}</div><div class="stat-label mt-2">Sales people</div></div></div></div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white border-0 p-3 p-lg-4">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div>
+                <h2 class="h5 mb-1">Customer visits</h2>
+                <small class="text-muted">{{ total_filtered }} matching visits · page {{ page }} of {{ total_pages }}</small>
+            </div>
+            <form method="get" action="/cre/dashboard" class="cre-visit-filters d-flex flex-wrap gap-2 align-items-center">
+                <input class="form-control form-control-sm" type="search" name="q" value="{{ query }}" placeholder="Name, mobile, product" aria-label="Search customers" style="width: 185px;">
+                <select class="form-select form-select-sm" name="activity" aria-label="Filter by status" style="width: 155px;">
+                    <option value="">All statuses</option>
+                    {% for option in visit_statuses %}<option value="{{ option }}" {% if selected_activity == option %}selected{% endif %}>{{ option }}</option>{% endfor %}
+                </select>
+                <select class="form-select form-select-sm" name="sales_person" aria-label="Filter by sales person" style="width: 155px;">
+                    <option value="0">All sales people</option>
+                    {% for person in sales_people %}<option value="{{ person.id }}" {% if selected_sales_person == person.id %}selected{% endif %}>{{ person.name }}</option>{% endfor %}
+                </select>
+                <select class="form-select form-select-sm" name="manager" aria-label="Filter by assigned manager" style="width: 145px;">
+                    <option value="0">All managers</option>
+                    {% for manager_item in managers %}<option value="{{ manager_item.id }}" {% if selected_manager == manager_item.id %}selected{% endif %}>{{ manager_item.name }}</option>{% endfor %}
+                </select>
+                <button class="btn btn-sm btn-outline-danger" type="submit"><i class="bi bi-search me-1"></i>Filter</button>
+                {% if query or selected_activity or selected_sales_person or selected_manager %}<a class="btn btn-sm btn-light" href="/cre/dashboard">Clear</a>{% endif %}
+            </form>
+        </div>
+    </div>
+
+    {% if visits %}
+    <div class="table-responsive cre-visits-scroll">
+        <table class="table cre-table table-hover mb-0">
+            <thead class="table-light"><tr><th class="ps-3">S.No.</th><th>Customer</th><th>Store</th><th>Product</th><th>Status</th><th>Walkout reason</th><th>Remark</th>{% for column in custom_columns %}<th>{{ column.label }}</th>{% endfor %}<th>Assigned Staff</th><th>Added</th><th>Action</th></tr></thead>
+            <tbody>
+                {% for row in visits %}
+                {% set visit = row.visit %}
+                <tr>
+                    <td class="ps-3 text-muted small">{{ row.serial_number }}</td>
+                    <td class="ps-3 cre-customer-name"><div class="fw-semibold">{{ visit.customer_name }}</div><a class="small text-decoration-none" href="tel:{{ visit.mobile_number }}"><i class="bi bi-telephone me-1"></i>{{ visit.mobile_number }}</a></td>
+                    <td class="small">{{ visit.store.store_name if visit.store else '-' }}</td>
+                    <td><span class="badge text-bg-light border">{{ visit.product_type.name }}</span></td>
+                    <td><span class="badge {{ 'text-bg-success' if visit_status(visit) == 'Billed' else 'text-bg-danger' if visit_status(visit) == 'Walkout' else 'text-bg-warning' if visit_status(visit) == 'Draft' else 'text-bg-light border' }}">{{ visit_status(visit) }}</span></td>
+                    <td class="small">{{ visit.walkout_reason or '-' }}</td>
+                    <td class="cre-remark small">{{ visit.remark or '-' }}</td>
+                    {% for custom_value in row.custom_values %}<td class="cre-dynamic-cell small">{{ custom_value.value or '-' }}</td>{% endfor %}
+                    <td class="small"><div><span class="text-muted">Sales:</span> {{ visit.handled_by.name if visit.handled_by else 'Not Assigned' }}</div><div><span class="text-muted">Manager:</span> {{ visit.assigned_manager.name if visit.assigned_manager else 'Not Assigned' }}</div></td>
+                    <td class="text-nowrap"><small class="text-muted">{{ visit.created_at.strftime('%d %b %Y, %I:%M %p') }}</small></td>
+                    <td><button class="btn btn-sm btn-outline-danger text-nowrap" type="button" data-bs-toggle="modal" data-bs-target="#viewCustomerModal-{{ visit.id }}"><i class="bi bi-eye me-1"></i>View</button></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if total_pages > 1 %}
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 p-3 border-top">
+        <small class="text-muted">Page {{ page }} of {{ total_pages }}</small>
+        <nav aria-label="Customer visit pages">
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item {% if page <= 1 %}disabled{% endif %}"><a class="page-link" href="/cre/dashboard?page={{ page - 1 }}{% if filter_query %}&{{ filter_query }}{% endif %}" aria-label="Previous">&laquo;</a></li>
+                {% for page_number in page_numbers %}<li class="page-item {% if page_number == page %}active{% endif %}"><a class="page-link" href="/cre/dashboard?page={{ page_number }}{% if filter_query %}&{{ filter_query }}{% endif %}">{{ page_number }}</a></li>{% endfor %}
+                <li class="page-item {% if page >= total_pages %}disabled{% endif %}"><a class="page-link" href="/cre/dashboard?page={{ page + 1 }}{% if filter_query %}&{{ filter_query }}{% endif %}" aria-label="Next">&raquo;</a></li>
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="text-center py-5 px-3">
+        <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center mb-3" style="width:64px;height:64px"><i class="bi bi-people fs-3 text-secondary"></i></div>
+        <h3 class="h6">No customer visits found</h3><p class="text-muted mb-3">Add a customer or change your search.</p>
+        {% if can_add_customer %}<button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#addCustomerModal"><i class="bi bi-person-plus me-1"></i>Add Walk-in Customer</button>{% else %}<a href="/cre/products" class="btn btn-danger">Add a Product First</a>{% endif %}
+    </div>
+    {% endif %}
+</div>
+
+{% for row in visits %}
+{% set visit = row.visit %}
+<div class="modal fade" id="viewCustomerModal-{{ visit.id }}" tabindex="-1" aria-labelledby="viewCustomerTitle-{{ visit.id }}" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header"><div><div class="text-uppercase small fw-semibold text-danger">Customer Visit</div><h2 class="modal-title h5" id="viewCustomerTitle-{{ visit.id }}">{{ visit.customer_name }}</h2></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+            <div class="modal-body">
+                <div class="cre-customer-view-state">
+                    <dl class="row cre-view-data mb-0">
+                        <div class="col-md-6"><dt>Mobile Number</dt><dd><a href="tel:{{ visit.mobile_number }}">{{ visit.mobile_number }}</a></dd></div>
+                        <div class="col-md-6"><dt>Product Type</dt><dd>{{ visit.product_type.name }}</dd></div>
+                        <div class="col-md-6"><dt>Status</dt><dd>{{ visit_status(visit) }}</dd></div>
+                        <div class="col-md-6"><dt>Store</dt><dd>{{ visit.store.store_name if visit.store else '-' }}</dd></div>
+                        <div class="col-md-6"><dt>Handled By</dt><dd>{{ visit.handled_by.name if visit.handled_by else 'Not Assigned' }}</dd></div>
+                        <div class="col-md-6"><dt>Assigned Manager</dt><dd>{{ visit.assigned_manager.name if visit.assigned_manager else 'Not Assigned' }}</dd></div>
+                        {% if visit.status == 'Walkout' %}<div class="col-md-6"><dt>Walkout Reason</dt><dd>{{ visit.walkout_reason or 'Not recorded' }}</dd></div><div class="col-md-6"><dt>Competitor Shop</dt><dd>{{ visit.competitor_shop or '-' }}</dd></div>{% endif %}
+                        <div class="col-12"><dt>Remark</dt><dd>{{ visit.remark or '-' }}</dd></div>
+                        {% for custom_value in row.custom_values %}
+                        <div class="col-md-6"><dt>{{ custom_columns[loop.index0].label }}</dt><dd>{{ custom_value.value or '-' }}</dd></div>
+                        {% endfor %}
+                        <div class="col-md-6"><dt>Added</dt><dd>{{ visit.created_at.strftime('%d %b %Y, %I:%M %p') }}</dd></div>
+                        <div class="col-md-6"><dt>Recorded By</dt><dd>{% if visit.creator %}{{ visit.creator.display_name or visit.creator.username }}{% else %}-{% endif %}</dd></div>
+                    </dl>
+                </div>
+                <form id="editCustomerForm-{{ visit.id }}" class="cre-customer-edit-form d-none" method="post" action="/cre/customers/{{ visit.id }}/edit">
+                    <div class="row g-3">
+                        <div class="col-md-6"><label class="form-label mb-1" for="edit-name-{{ visit.id }}">Customer Name</label><input class="form-control" id="edit-name-{{ visit.id }}" name="customer_name" value="{{ visit.customer_name }}" maxlength="120" required></div>
+                        <div class="col-md-6"><label class="form-label mb-1" for="edit-mobile-{{ visit.id }}">Mobile Number</label><input class="form-control" id="edit-mobile-{{ visit.id }}" name="mobile_number" type="tel" inputmode="tel" value="{{ visit.mobile_number }}" maxlength="24" required></div>
+                        <div class="col-md-6"><label class="form-label mb-1" for="edit-status-{{ visit.id }}">Status</label><select class="form-select cre-edit-status" id="edit-status-{{ visit.id }}" name="status" required>{% for option in visit_statuses %}<option value="{{ option }}" {% if visit_status(visit) == option %}selected{% endif %}>{{ option }}</option>{% endfor %}</select></div>
+                        <div class="col-md-6"><label class="form-label mb-1" for="edit-store-{{ visit.id }}">Store</label><select class="form-select" id="edit-store-{{ visit.id }}" name="store_id" required><option value="">Choose store</option>{% for store in stores %}<option value="{{ store.id }}" {% if visit.store_id == store.id %}selected{% endif %}>{{ store.store_name }}</option>{% endfor %}</select></div>
+                        <div class="col-md-6"><label class="form-label mb-1" for="edit-product-{{ visit.id }}">Product Type</label><select class="form-select" id="edit-product-{{ visit.id }}" name="product_type_id" required>{% for product_type in product_types %}<option value="{{ product_type.id }}" {% if visit.product_type_id == product_type.id %}selected{% endif %}>{{ product_type.name }}</option>{% endfor %}</select></div>
+                        <div class="col-md-6"><label class="form-label mb-1" for="edit-sales-{{ visit.id }}">Sales Person</label><select class="form-select" id="edit-sales-{{ visit.id }}" name="handled_by_id" required><option value="0" {% if not visit.handled_by_id %}selected{% endif %}>Not Assigned</option>{% if visit.handled_by and visit.handled_by_id not in (sales_people|map(attribute='id')|list) %}<option value="{{ visit.handled_by_id }}" selected>{{ visit.handled_by.name }} (inactive)</option>{% endif %}{% for person in sales_people %}<option value="{{ person.id }}" {% if visit.handled_by_id == person.id %}selected{% endif %}>{{ person.name }}</option>{% endfor %}</select></div>
+                        <div class="col-md-6"><label class="form-label mb-1" for="edit-manager-{{ visit.id }}">Assigned Manager</label><select class="form-select" id="edit-manager-{{ visit.id }}" name="assigned_manager_id" required><option value="0" {% if not visit.assigned_manager_id %}selected{% endif %}>Not Assigned</option>{% if visit.assigned_manager and visit.assigned_manager_id not in (managers|map(attribute='id')|list) %}<option value="{{ visit.assigned_manager_id }}" selected>{{ visit.assigned_manager.name }} (inactive)</option>{% endif %}{% for manager_item in managers %}<option value="{{ manager_item.id }}" {% if visit.assigned_manager_id == manager_item.id %}selected{% endif %}>{{ manager_item.name }}</option>{% endfor %}</select></div>
+                        <div class="col-md-6 cre-edit-walkout-fields {% if visit.status != 'Walkout' %}d-none{% endif %}"><label class="form-label mb-1" for="edit-walkout-reason-{{ visit.id }}">Walkout Reason</label><select class="form-select cre-edit-walkout-reason" id="edit-walkout-reason-{{ visit.id }}" name="walkout_reason"><option value="">Choose reason</option>{% if visit.walkout_reason and visit.walkout_reason not in walkout_reasons %}<option value="{{ visit.walkout_reason }}" selected>{{ visit.walkout_reason }} (removed)</option>{% endif %}{% for reason in walkout_reasons %}<option value="{{ reason }}" {% if visit.walkout_reason == reason %}selected{% endif %}>{{ reason }}</option>{% endfor %}</select></div>
+                        <div class="col-md-6 cre-edit-walkout-fields {% if visit.status != 'Walkout' %}d-none{% endif %}"><label class="form-label mb-1" for="edit-competitor-{{ visit.id }}">Lost to Competitor (optional)</label><select class="form-select" id="edit-competitor-{{ visit.id }}" name="competitor_shop"><option value="">Not recorded</option>{% if visit.competitor_shop and visit.competitor_shop not in competitor_shops %}<option value="{{ visit.competitor_shop }}" selected>{{ visit.competitor_shop }} (removed)</option>{% endif %}{% for competitor in competitor_shops %}<option value="{{ competitor }}" {% if visit.competitor_shop == competitor %}selected{% endif %}>{{ competitor }}</option>{% endfor %}</select></div>
+                        <div class="col-12"><label class="form-label mb-1" for="edit-remark-{{ visit.id }}">Remark{% if visit.status == 'Walkout' %} <span class="text-danger">*</span>{% endif %}</label><textarea class="form-control cre-edit-remark" id="edit-remark-{{ visit.id }}" name="remark" rows="2" maxlength="1000" placeholder="Add a remark">{{ visit.remark or '' }}</textarea></div>
+                        {% for field_def in form_field_definitions %}
+                        {% set field = field_def.field %}
+                        {% set field_value = row.custom_values[loop.index0].value %}
+                        <div class="col-md-6">
+                            <label class="form-label mb-1" for="edit-custom-{{ visit.id }}-{{ field.id }}">{{ field.label }}{% if field.is_required %} <span class="text-danger">*</span>{% endif %}</label>
+                            {% if field.field_type == 'textarea' %}<textarea class="form-control" id="edit-custom-{{ visit.id }}-{{ field.id }}" name="custom_{{ field.id }}" rows="2" maxlength="500" {% if field.is_required %}required{% endif %}>{{ field_value }}</textarea>
+                            {% elif field.field_type == 'select' %}<select class="form-select" id="edit-custom-{{ visit.id }}-{{ field.id }}" name="custom_{{ field.id }}" {% if field.is_required %}required{% endif %}><option value="">Choose {{ field.label }}</option>{% for option in field_def.options %}<option value="{{ option }}" {% if field_value == option %}selected{% endif %}>{{ option }}</option>{% endfor %}</select>
+                            {% elif field.field_type == 'number' %}<input class="form-control" type="number" step="any" id="edit-custom-{{ visit.id }}-{{ field.id }}" name="custom_{{ field.id }}" value="{{ field_value }}" {% if field.is_required %}required{% endif %}>
+                            {% elif field.field_type == 'date' %}<input class="form-control" type="date" id="edit-custom-{{ visit.id }}-{{ field.id }}" name="custom_{{ field.id }}" value="{{ field_value }}" {% if field.is_required %}required{% endif %}>
+                            {% else %}<input class="form-control" type="text" id="edit-custom-{{ visit.id }}-{{ field.id }}" name="custom_{{ field.id }}" value="{{ field_value }}" maxlength="500" {% if field.is_required %}required{% endif %}>{% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer cre-customer-view-footer"><button class="btn btn-light" type="button" data-bs-dismiss="modal">Close</button><button class="btn btn-outline-danger" type="button" data-cre-edit-open><i class="bi bi-pencil me-1"></i>Edit details</button></div>
+            <div class="modal-footer cre-customer-edit-footer d-none"><button class="btn btn-light" type="button" data-cre-edit-cancel>Cancel</button><button class="btn btn-danger" type="submit" form="editCustomerForm-{{ visit.id }}"><i class="bi bi-check2 me-1"></i>Save changes</button></div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% if can_add_customer %}
+<div class="modal fade cre-add-customer-modal" id="addCustomerModal" tabindex="-1" aria-labelledby="addCustomerTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow">
+            <form method="post" action="/cre/customers">
+                <div class="modal-header"><div><h2 class="modal-title h5" id="addCustomerTitle">Add Walk-in Customer</h2><small class="text-muted">Record the customer and visit status.</small></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+                <div class="modal-body">
+                    <div class="row g-2">
+                        <div class="col-md-6"><label class="form-label mb-1" for="customer-name">Customer Name</label><input class="form-control" id="customer-name" name="customer_name" maxlength="120" autocomplete="name" placeholder="Enter customer name" required autofocus></div>
+                        <div class="col-md-6"><label class="form-label mb-1" for="mobile-number">Mobile Number</label><input class="form-control" id="mobile-number" name="mobile_number" type="tel" inputmode="tel" maxlength="24" autocomplete="tel" placeholder="e.g. +91 98765 43210" required></div>
+                        <div class="col-12"><label class="form-label mb-1" for="customer-status">Status</label><select class="form-select" id="customer-status" name="status" required>{% for option in visit_statuses %}<option value="{{ option }}">{{ option }}</option>{% endfor %}</select></div>
+                        <div class="col-md-6 cre-add-walkout-fields d-none"><label class="form-label mb-1" for="add-walkout-reason">Walkout Reason</label><select class="form-select" id="add-walkout-reason" name="walkout_reason" disabled><option value="">Choose reason</option>{% for reason in walkout_reasons %}<option value="{{ reason }}">{{ reason }}</option>{% endfor %}</select></div>
+                        <div class="col-md-6 cre-add-walkout-fields d-none"><label class="form-label mb-1" for="add-competitor">Competitor Shop (optional)</label><select class="form-select" id="add-competitor" name="competitor_shop" disabled><option value="">Not recorded</option>{% for competitor in competitor_shops %}<option value="{{ competitor }}">{{ competitor }}</option>{% endfor %}</select></div>
+                        <div class="col-12 cre-add-walkout-fields d-none"><label class="form-label mb-1" for="add-remark">Walkout Remark <span class="text-danger">*</span></label><textarea class="form-control" id="add-remark" name="remark" rows="2" maxlength="1000" disabled></textarea></div>
+                        <div class="col-md-3"><label class="form-label mb-1" for="store-id">Store</label><select class="form-select" id="store-id" name="store_id" required><option value="" {% if stores|length != 1 %}selected{% endif %}>Choose store</option>{% for store in stores %}<option value="{{ store.id }}" {% if stores|length == 1 %}selected{% endif %}>{{ store.store_name }}</option>{% endfor %}</select></div>
+                        <div class="col-md-3"><label class="form-label mb-1" for="product-type">Product Type</label><select class="form-select" id="product-type" name="product_type_id" required><option value="" {% if product_types|length != 1 %}selected{% endif %}>Choose product</option>{% for product_type in product_types %}<option value="{{ product_type.id }}" {% if product_types|length == 1 %}selected{% endif %}>{{ product_type.name }}</option>{% endfor %}</select></div>
+                        <div class="col-md-4"><label class="form-label mb-1" for="handled-by">Sales Person</label><select class="form-select" id="handled-by" name="handled_by_id" required><option value="0" {% if sales_people|length != 1 %}selected{% endif %}>Not Assigned</option>{% for person in sales_people %}<option value="{{ person.id }}" {% if sales_people|length == 1 %}selected{% endif %}>{{ person.name }}</option>{% endfor %}</select></div>
+                        <div class="col-md-4"><label class="form-label mb-1" for="assigned-manager">Manager</label><select class="form-select" id="assigned-manager" name="assigned_manager_id" required><option value="0" {% if managers|length != 1 %}selected{% endif %}>Not Assigned</option>{% for manager_item in managers %}<option value="{{ manager_item.id }}" {% if managers|length == 1 %}selected{% endif %}>{{ manager_item.name }}</option>{% endfor %}</select></div>
+                    </div>
+                    {% if form_field_definitions %}
+                    <div class="row g-2 mt-2">
+                        {% for field_def in form_field_definitions %}
+                        {% set field = field_def.field %}
+                        <div class="col-md-6">
+                            <label class="form-label mb-1" for="custom-{{ field.id }}">{{ field.label }}{% if field.is_required %} <span class="text-danger">*</span>{% endif %}</label>
+                            {% if field.field_type == 'textarea' %}<textarea class="form-control" id="custom-{{ field.id }}" name="custom_{{ field.id }}" rows="2" {% if field.is_required %}required{% endif %}></textarea>
+                            {% elif field.field_type == 'select' %}<select class="form-select" id="custom-{{ field.id }}" name="custom_{{ field.id }}" {% if field.is_required %}required{% endif %}><option value="">Choose {{ field.label }}</option>{% for option in field_def.options %}<option value="{{ option }}">{{ option }}</option>{% endfor %}</select>
+                            {% elif field.field_type == 'number' %}<input class="form-control" type="number" step="any" id="custom-{{ field.id }}" name="custom_{{ field.id }}" {% if field.is_required %}required{% endif %}>
+                            {% elif field.field_type == 'date' %}<input class="form-control" type="date" id="custom-{{ field.id }}" name="custom_{{ field.id }}" {% if field.is_required %}required{% endif %}>
+                            {% else %}<input class="form-control" type="text" id="custom-{{ field.id }}" name="custom_{{ field.id }}" maxlength="500" {% if field.is_required %}required{% endif %}>{% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="modal-footer cre-customer-submit-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button><button class="btn btn-danger" type="submit"><i class="bi bi-person-plus me-1"></i>Add Walk-in Customer</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const addCustomerModal = document.getElementById('addCustomerModal');
+    if (addCustomerModal) {
+        addCustomerModal.addEventListener('shown.bs.modal', function () {
+            const customerName = document.getElementById('customer-name');
+            if (customerName) customerName.focus();
+        });
+    }
+    const addStatus = document.getElementById('customer-status');
+    function syncAddStatus() {
+        const walkout = addStatus.value === 'Walkout';
+        addCustomerModal.querySelectorAll('.cre-add-walkout-fields').forEach(function (field) {
+            field.classList.toggle('d-none', !walkout);
+            field.querySelectorAll('select, textarea').forEach(function (input) {
+                input.disabled = !walkout;
+                input.required = walkout && input.name !== 'competitor_shop';
+            });
+        });
+    }
+    if (addStatus) {
+        addStatus.addEventListener('change', syncAddStatus);
+        addCustomerModal.addEventListener('show.bs.modal', syncAddStatus);
+        syncAddStatus();
+    }
+    document.querySelectorAll('.modal[id^="viewCustomerModal-"]').forEach(function (modal) {
+        const viewState = modal.querySelector('.cre-customer-view-state');
+        const editForm = modal.querySelector('.cre-customer-edit-form');
+        const viewFooter = modal.querySelector('.cre-customer-view-footer');
+        const editFooter = modal.querySelector('.cre-customer-edit-footer');
+        const status = editForm.querySelector('.cre-edit-status');
+        const remark = editForm.querySelector('.cre-edit-remark');
+        const walkoutFields = editForm.querySelectorAll('.cre-edit-walkout-fields');
+        const walkoutReason = editForm.querySelector('.cre-edit-walkout-reason');
+        function syncEditFields() {
+            const isWalkout = status.value === 'Walkout';
+            remark.required = isWalkout;
+            walkoutFields.forEach(function (field) { field.classList.toggle('d-none', !isWalkout); });
+            walkoutReason.required = isWalkout;
+        }
+        function showEdit(show) {
+            if (show) editForm.reset();
+            viewState.classList.toggle('d-none', show);
+            editForm.classList.toggle('d-none', !show);
+            viewFooter.classList.toggle('d-none', show);
+            editFooter.classList.toggle('d-none', !show);
+            if (show) syncEditFields();
+        }
+        modal.querySelector('[data-cre-edit-open]').addEventListener('click', function () { showEdit(true); });
+        modal.querySelector('[data-cre-edit-cancel]').addEventListener('click', function () { showEdit(false); });
+        status.addEventListener('change', syncEditFields);
+        syncEditFields();
+    });
+});
+</script>
+{% endblock %}
