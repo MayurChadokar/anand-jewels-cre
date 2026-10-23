@@ -1,40 +1,82 @@
 {% extends "base.html" %}
+{% from "_pagination.html" import pager %}
 
-{% block title %}CRE Reports - Anand Jewels{% endblock %}
+{% block title %}{{ 'Walkout Register' if standalone_walkout else 'CRE Reports' }} - Anand Jewels{% endblock %}
 
 {% block content %}
 <style>
-    .report-title-band { background: #d9edf7; border: 1px solid #9fc5e8; }
-    .report-total-row td { background: #fff200 !important; font-weight: 700; }
+    .report-title-band { background: linear-gradient(110deg, #fff2e1, #fff5f5); border: 1px solid #efdfd4; border-radius: 14px; color: #793a2e; }
+    .report-total-row td { background: #f4f1eb !important; font-weight: 700; }
     .report-card { height: 100%; }
     .report-card .table { margin-bottom: 0; }
-    .report-card .table th, .report-data-table th { background: #d9edf7; font-size: .78rem; text-transform: uppercase; white-space: nowrap; }
+    .report-card .table th, .report-data-table th { background: #f6f7fa; font-size: .72rem; text-transform: uppercase; white-space: nowrap; color: #667085; }
     .report-card .table td, .report-data-table td { vertical-align: middle; }
     .report-tabs .nav-link { font-weight: 600; }
     .report-data-table { min-width: 920px; }
+    .cre-reports .card { border-radius: 18px; overflow: hidden; border-color: #e8eaf0 !important; }
+    .cre-reports .card-header { padding: 1.2rem; }
+    .report-heading { background: linear-gradient(115deg, #fff, #fff6ee); padding: 1.5rem; border: 1px solid #eedfdf; border-radius: 20px; }
+    .report-heading h1 { font-weight: 700; letter-spacing: -.035em; }
+    .report-tabs { padding: .4rem; gap: .4rem; border: 1px solid #e8eaf0; background: #fff; border-radius: 14px; }
+    .report-tabs .nav-link { border: 0; border-radius: 10px; color: #667085; padding: .7rem 1rem; font-size: .85rem; }
+    .report-tabs .nav-link.active { background: #a82c2c; color: #fff; box-shadow: 0 3px 9px #a82c2c26; }
+    .cre-reports .form-control, .cre-reports .form-select { border-radius: 9px; border-color: #dfe3eb; }
+    .cre-reports .form-label { color: #667085; font-size: .8rem; font-weight: 600; }
+    .cre-reports .btn { border-radius: 9px; }
+    .cre-reports .display-6 { font-size: 2rem; margin-top: .5rem; }
+    .cre-reports .table tbody td { padding: .9rem 1rem; }
+    .report-count { background: #fce8e8; color: #a82c2c; padding: .2rem .6rem; border-radius: 8px; font-size: .85rem; vertical-align: middle; }
+    .report-mini-stat { background: #fff; border: 1px solid #e8eaf0; border-radius: 14px; padding: 1rem 1.2rem; display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+    .report-mini-stat strong { font-size: 1.5rem; }
+    .report-register-scroll { max-height: 75vh; overflow: auto; }
+    .report-walkout-table { min-width: 1700px; font-size: .83rem; }
+    .report-walkout-table thead th { position: sticky; top: 0; z-index: 1; background: #f6f7fa; color: #667085; white-space: nowrap; font-size: .7rem; }
+    .report-walkout-table td { min-width: 150px; max-width: 260px; vertical-align: top; overflow-wrap: anywhere; }
+    .report-walkout-table td:first-child { min-width: 65px; border-left: 3px solid #e36d6d; }
+    .report-walkout-table .report-recovered { --bs-table-bg: #eef9f2; --bs-table-hover-bg: #e0f4e8; }
+    .report-walkout-table .report-recovered td:first-child { border-left-color: #209568; }
+    .report-walkout-table .report-open { --bs-table-bg: #fffafa; --bs-table-hover-bg: #fff1f1; }
+    .report-followup-cell { min-width: 200px !important; }
+    .report-followup-add { border: 1px dashed #d5b9b9; color: #9b3636; background: #fff; white-space: nowrap; }
+    .report-followup-add:hover { background: #fff0eb; border-color: #a82c2c; }
+    .report-saved-followup { background: #ffffffb3; border: 1px solid #deebe1; border-radius: 10px; padding: .8rem; }
+    .report-note { white-space: pre-wrap; overflow-wrap: anywhere; }
+    .report-reason { display: inline-block; padding: .3rem .55rem; border-radius: 6px; color: #a33737; background: #fce8e8; font-size: .73rem; font-weight: 600; }
+    .report-followup-modal .modal-content { border: 0; border-radius: 20px; overflow: hidden; }
+    .report-followup-modal .modal-header { background: linear-gradient(110deg, #fff2e1, #fff5f5); padding: 1.4rem; }
+    .report-followup-modal .modal-body { padding: 1.4rem; }
+    .report-followup-modal textarea { border-radius: 12px; }
+    .report-followup-modal .modal-footer { background: #fafbfc; }
     @media print {
         .navbar, #desktopSidebar, #mobileSidebar, .report-actions, .report-filters, .report-tabs { display: none !important; }
         .container-fluid { width: 100% !important; }
         .card { box-shadow: none !important; border: 1px solid #999 !important; }
         .tab-pane { display: block !important; opacity: 1 !important; }
         .report-title-band { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .report-register-scroll { max-height: none; overflow: visible; }
+        .report-followup-add, .report-outcome-form { display: none !important; }
     }
 </style>
 
-<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+<div class="cre-reports">
+<div class="report-heading d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
     <div>
         <div class="text-uppercase small fw-semibold text-danger mb-1">Customer Relations</div>
-        <h1 class="h3 mb-1">Walk-in Reports</h1>
-        <p class="text-muted mb-0">{{ date_from.strftime('%d %b %Y') }} to {{ date_to.strftime('%d %b %Y') }}</p>
+        <h1 class="h3 mb-1" id="walkoutRegisterHeading">{{ 'Walkout Register' if standalone_walkout else 'Walk-in Reports' }}</h1>
+        <p class="text-muted mb-0">{% if standalone_walkout and date_from.year == 1900 %}All recorded visits through {{ date_to.strftime('%d %b %Y') }}{% else %}{{ date_from.strftime('%d %b %Y') }} to {{ date_to.strftime('%d %b %Y') }}{% endif %}</p>
     </div>
     <div class="d-flex flex-wrap gap-2 report-actions">
-        <a class="btn btn-success" href="/cre/reports/export/excel?date_from={{ date_from.isoformat() }}&date_to={{ date_to.isoformat() }}&store_id={{ selected_store_id }}&manager_id={{ selected_manager_id }}&sales_person_id={{ selected_sales_person_id }}&walkout_reason={{ selected_walkout_reason }}&competitor_shop={{ selected_competitor_shop }}"><i class="bi bi-file-earmark-excel me-1"></i>Download Excel</a>
-        <button class="btn btn-outline-dark" type="button" onclick="window.print()"><i class="bi bi-printer me-1"></i>Print / Save PDF</button>
+        <a class="btn btn-success" href="{{ '/cre/walkout-register/export/excel' if standalone_walkout else '/cre/reports/export/excel' }}?date_from={{ date_from.isoformat() }}&date_to={{ date_to.isoformat() }}&store_id={{ selected_store_id }}&manager_id={{ selected_manager_id }}&sales_person_id={{ selected_sales_person_id }}&walkout_reason={{ selected_walkout_reason|urlencode }}&competitor_shop={{ selected_competitor_shop|urlencode }}"><i class="bi bi-file-earmark-excel me-1"></i>Download Excel</a>
     </div>
 </div>
 
+{% if message %}<div class="alert alert-success alert-dismissible fade show" role="status"><i class="bi bi-check-circle me-2"></i>{{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>{% endif %}
+{% if error %}<div class="alert alert-danger alert-dismissible fade show" role="alert"><i class="bi bi-exclamation-circle me-2"></i>{{ error }}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>{% endif %}
+
+{% if not standalone_walkout %}
 <form method="get" action="/cre/reports" class="card border-0 shadow-sm p-3 mb-4 report-filters">
-    <input type="hidden" name="tab" value="overview">
+            <input type="hidden" name="per_page" value="{{ per_page }}">
+    <input type="hidden" name="tab" id="reportActiveTab" value="{{ active_tab }}">
     <div class="row g-2 align-items-end">
         <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="report-date-from">From</label><input class="form-control" id="report-date-from" type="date" name="date_from" value="{{ date_from.isoformat() }}"></div>
         <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="report-date-to">To</label><input class="form-control" id="report-date-to" type="date" name="date_to" value="{{ date_to.isoformat() }}"></div>
@@ -58,7 +100,9 @@
     <li class="nav-item" role="presentation"><button class="nav-link {% if active_tab == 'sales' %}active{% endif %}" id="sales-tab" data-bs-toggle="tab" data-bs-target="#sales-panel" type="button" role="tab" aria-controls="sales-panel" aria-selected="{{ 'true' if active_tab == 'sales' else 'false' }}"><i class="bi bi-person-badge me-1"></i>Sales Person Report</button></li>
 </ul>
 
+{% endif %}
 <div class="tab-content" id="reportTabsContent">
+{% if not standalone_walkout %}
     <section class="tab-pane fade {% if active_tab == 'overview' %}show active{% endif %}" id="overview-panel" role="tabpanel" aria-labelledby="overview-tab">
         <div class="row g-3 mb-4">
             <div class="col-6 col-xl-3"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-muted small">Total walk-ins</div><div class="display-6 fw-semibold">{{ report.summary.total }}</div></div></div></div>
@@ -84,14 +128,17 @@
             <div class="col-6 col-xl-3"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-muted small">Walkouts</div><div class="display-6 fw-semibold text-danger">{{ report.summary.walkouts }}</div><small class="text-muted">{{ '%.2f'|format(report.summary.walkout_percent) }}%</small></div></div></div>
             <div class="col-6 col-xl-3"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-muted small">Other visitors</div><div class="display-6 fw-semibold text-warning">{{ report.summary.other_visitors }}</div><small class="text-muted">Includes {{ report.summary.pending }} draft</small></div></div></div>
         </div>
-        <div class="card border shadow-sm"><div class="card-header bg-white border-0 pt-3"><h2 class="h6 mb-0">Walk-in register <span class="text-muted fw-normal">({{ report.walkin_rows|length }} visits)</span></h2></div><div class="table-responsive"><table class="table table-hover report-data-table mb-0"><thead><tr><th>Date & time</th><th>Customer</th><th>Mobile</th><th>Store</th><th>Status</th><th>Sales person</th><th>Manager</th></tr></thead><tbody>{% for row in report.walkin_rows %}<tr><td class="text-nowrap">{{ row.date.strftime('%d %b %Y, %I:%M %p') }}</td><td>{{ row.customer_name }}</td><td>{{ row.mobile_number }}</td><td>{{ row.store_name }}</td><td>{% if row.status == 'Billed' %}<span class="badge text-bg-success">Billed</span>{% elif row.status == 'Walkout' %}<span class="badge text-bg-danger">Walkout</span>{% elif row.status == 'Draft' %}<span class="badge text-bg-warning">Draft</span>{% else %}<span class="badge text-bg-light border">{{ row.status }}</span>{% endif %}</td><td>{{ row.sales_person }}</td><td>{{ row.manager }}</td></tr>{% else %}<tr><td colspan="7" class="text-center text-muted py-4">No walk-ins for the selected filters.</td></tr>{% endfor %}</tbody></table></div></div>
+        <div class="card border shadow-sm"><div class="card-header bg-white border-0 pt-3"><h2 class="h6 mb-0">Walk-in register <span class="text-muted fw-normal">({{ report_pages.walkin.total }} visits)</span></h2></div><div class="table-responsive"><table class="table table-hover report-data-table mb-0"><thead><tr><th>Date & time</th><th>Visit No.</th><th>Customer</th><th>Mobile</th><th>Store</th><th>Category</th><th>Status</th><th>Sales person</th><th>Manager</th></tr></thead><tbody>{% for row in report.walkin_rows %}<tr><td class="text-nowrap">{{ row.date|ist }}</td><td class="cre-visit-reference">{{ row.visit_number }}</td><td>{{ row.customer_name }}</td><td>{{ row.mobile_number }}</td><td>{{ row.store_name }}</td><td>{{ row.category }}</td><td>{% if row.status == 'Billed' %}<span class="badge text-bg-success">Billed</span>{% elif row.status == 'Walkout' %}<span class="badge text-bg-danger">Walkout</span>{% elif row.status == 'Draft' %}<span class="badge text-bg-warning">Draft</span>{% else %}<span class="badge text-bg-light border">{{ row.status }}</span>{% endif %}</td><td>{{ row.sales_person }}</td><td>{{ row.manager }}</td></tr>{% else %}<tr><td colspan="9" class="text-center text-muted py-4">No walk-ins for the selected filters.</td></tr>{% endfor %}</tbody></table></div></div>
+        {{ pager(report_pages.walkin, 'Walkin') }}
     </section>
 
-    <section class="tab-pane fade {% if active_tab == 'walkout' %}show active{% endif %}" id="walkout-panel" role="tabpanel" aria-labelledby="walkout-tab">
-        <form method="get" action="/cre/reports" class="card border-0 shadow-sm p-3 mb-4">
+{% endif %}
+    <section class="tab-pane fade {% if active_tab == 'walkout' %}show active{% endif %}" id="walkout-panel" role="{{ 'region' if standalone_walkout else 'tabpanel' }}" aria-labelledby="{{ 'walkoutRegisterHeading' if standalone_walkout else 'walkout-tab' }}">
+        <form method="get" action="{{ '/cre/walkout-register' if standalone_walkout else '/cre/reports' }}" class="card border-0 shadow-sm p-3 mb-4">
+            <input type="hidden" name="per_page" value="{{ per_page }}">
             <input type="hidden" name="tab" value="walkout">
             <div class="row g-2 align-items-end">
-                <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="walkout-from">From</label><input class="form-control" id="walkout-from" type="date" name="date_from" value="{{ date_from.isoformat() }}"></div>
+                <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="walkout-from">From</label><input class="form-control" id="walkout-from" type="date" name="date_from" value="{{ date_from.isoformat() if date_from.year != 1900 else '' }}"></div>
                 <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="walkout-to">To</label><input class="form-control" id="walkout-to" type="date" name="date_to" value="{{ date_to.isoformat() }}"></div>
                 <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="walkout-store">Store</label><select class="form-select" id="walkout-store" name="store_id"><option value="0">All stores</option>{% for store in stores %}<option value="{{ store.id }}" {% if selected_store_id == store.id %}selected{% endif %}>{{ store.store_name }}</option>{% endfor %}</select></div>
                 <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="walkout-manager">Manager</label><select class="form-select" id="walkout-manager" name="manager_id"><option value="0">All managers</option>{% for manager in managers %}<option value="{{ manager.id }}" {% if selected_manager_id == manager.id %}selected{% endif %}>{{ manager.name }}</option>{% endfor %}</select></div>
@@ -99,11 +146,57 @@
                 <div class="col-sm-6 col-lg-2 d-grid"><button class="btn btn-danger" type="submit"><i class="bi bi-funnel me-1"></i>Apply filter</button></div>
             </div>
         </form>
-        <div class="row g-4"><div class="col-lg-4"><section class="card report-card border shadow-sm"><div class="card-header bg-white border-0 pt-3"><h2 class="h6 mb-0">Walkout reason summary</h2></div><div class="table-responsive"><table class="table table-bordered table-sm"><thead><tr><th>Reason</th><th class="text-end">Count</th></tr></thead><tbody>{% for row in report.reason_rows %}<tr><td>{{ row.name }}</td><td class="text-end">{{ row.count }}</td></tr>{% else %}<tr><td colspan="2" class="text-center text-muted py-3">No walkouts.</td></tr>{% endfor %}{% if report.reason_rows %}<tr class="report-total-row"><td>Total</td><td class="text-end">{{ report.summary.walkouts }}</td></tr>{% endif %}</tbody></table></div></section></div><div class="col-lg-8"><div class="card border shadow-sm"><div class="card-header bg-white border-0 pt-3"><h2 class="h6 mb-0">Walkout register</h2></div><div class="table-responsive"><table class="table table-hover report-data-table mb-0"><thead><tr><th>Date</th><th>Customer</th><th>Store</th><th>Manager</th><th>Reason</th><th>Competitor</th><th>Remark</th></tr></thead><tbody>{% for row in report.walkout_rows %}<tr><td class="text-nowrap">{{ row.date.strftime('%d %b %Y, %I:%M %p') }}</td><td><div>{{ row.customer_name }}</div><small class="text-muted">{{ row.mobile_number }}</small></td><td>{{ row.store_name }}</td><td>{{ row.manager }}</td><td>{{ row.reason }}</td><td>{{ row.competitor }}</td><td>{{ row.remark }}</td></tr>{% else %}<tr><td colspan="7" class="text-center text-muted py-4">No walkouts for the selected filters.</td></tr>{% endfor %}</tbody></table></div></div></div></div>
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+            <div><h2 class="h5 mb-1">Walkout register <span class="report-count">{{ report.register_metrics.total }}</span></h2><p class="text-muted small mb-0">Complete list for the selected dates. Newest visits first. Saved follow-ups are permanent.</p></div>
+            <a class="btn btn-outline-danger btn-sm" href="{{ '/cre/walkout-register' if standalone_walkout else '/cre/reports' }}?per_page={{ per_page }}&tab=walkout&date_from=1900-01-01&date_to={{ today_iso }}&store_id={{ selected_store_id }}&manager_id={{ selected_manager_id }}&sales_person_id={{ selected_sales_person_id }}&walkout_reason={{ selected_walkout_reason|urlencode }}&competitor_shop={{ selected_competitor_shop|urlencode }}"><i class="bi bi-list-ul me-1"></i>Show all dates</a>
+        </div>
+        <div class="row g-3 mb-4">
+            <div class="col-sm-6 col-xl-3"><div class="report-mini-stat"><span class="text-muted small">Registered walkouts</span><strong>{{ report.register_metrics.total }}</strong></div></div>
+            <div class="col-sm-6 col-xl-3"><div class="report-mini-stat"><span class="text-muted small">Current walkouts</span><strong class="text-danger">{{ report.register_metrics.open }}</strong></div></div>
+            <div class="col-sm-6 col-xl-3"><div class="report-mini-stat"><span class="text-muted small">Recovered to billed</span><strong class="text-success">{{ report.recovered_count }}</strong></div></div>
+            <div class="col-sm-6 col-xl-3"><div class="report-mini-stat"><span class="text-muted small">Follow-up pending</span><strong style="color:#946200">{{ report.register_metrics.pending_followups }}</strong></div></div>
+        </div>
+        <div class="card report-register border-0 shadow-sm">
+            <div class="table-responsive report-register-scroll">
+                <table class="table table-hover report-walkout-table mb-0">
+                    <thead><tr><th scope="col">S.No.</th><th scope="col">Visit No.</th><th scope="col">Customer / Visit</th><th scope="col">Store / Product</th><th scope="col">Sales Person / Manager</th><th scope="col">Walkout details</th><th scope="col">Follow-up 1</th><th scope="col">Follow-up 2</th><th scope="col">Follow-up 3</th><th scope="col">Final status</th></tr></thead>
+                    <tbody>
+                    {% for row in report.walkout_rows %}
+                    <tr class="{{ 'report-recovered' if row.status == 'Billed' else 'report-open' }}">
+                        <td class="text-muted small">{{ report_pages.walkout.offset + loop.index }}</td>
+                        <td class="cre-visit-reference">{{ row.visit_number }}</td>
+                        <td><div class="fw-semibold">{{ row.customer_name }}</div><a href="tel:{{ row.mobile_number }}" class="small text-decoration-none">{{ row.mobile_number }}</a><div class="text-muted small mt-2">{{ row.date|ist }}</div></td>
+                        <td><div>{{ row.store_name }}</div><span class="badge bg-white text-dark border mt-2">{{ row.product }}</span><div class="small text-muted mt-2">Category: {{ row.category }}</div></td>
+                        <td><div class="small"><span class="text-muted">Sales:</span> {{ row.sales_person }}</div><div class="small mt-2"><span class="text-muted">Manager:</span> {{ row.manager }}</div></td>
+                        <td><span class="report-reason">{{ row.reason }}</span><div class="small mt-2 report-note">{{ row.remark }}</div><div class="text-muted small mt-2">Competitor: {{ row.competitor }}</div></td>
+                        {% for slot in (1, 2, 3) %}
+                        {% set saved = row.followups.get(slot) %}
+                        <td class="report-followup-cell">
+                            {% if saved %}
+                            <div class="report-saved-followup"><div class="small text-success fw-semibold mb-2"><i class="bi bi-lock-fill me-1" aria-hidden="true"></i>Saved &amp; locked</div><div class="report-note small">{{ saved.note }}</div><div class="text-muted mt-2 report-followup-meta">{{ saved.created_at|ist }}<br>{{ saved.author.display_name or saved.author.username if saved.author else 'Staff' }}</div></div>
+                            {% elif row.status == 'Billed' %}
+                            <span class="text-success small"><i class="bi bi-lock-fill me-1" aria-hidden="true"></i>Billed entry locked</span>
+                            {% elif slot == 1 or row.followups.get(slot - 1) %}
+                            <button class="btn btn-sm report-followup-add" type="button" data-bs-toggle="modal" data-bs-target="#followupModal" data-visit-id="{{ row.id }}" data-slot="{{ slot }}" data-customer="{{ row.customer_name }}"><i class="bi bi-plus-circle me-1" aria-hidden="true"></i>Add follow-up {{ slot }}</button>
+                            {% else %}
+                            <span class="text-muted small"><i class="bi bi-hourglass me-1" aria-hidden="true"></i>Save follow-up {{ slot - 1 }} first</span>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                        <td><span class="badge {{ 'text-bg-success' if row.status == 'Billed' else 'text-bg-danger' if row.status == 'Walkout' else 'text-bg-warning' }} mb-2">{{ row.status }}</span>{% if row.status != 'Billed' %}<div><button class="btn btn-sm btn-outline-danger" type="button" data-bs-toggle="modal" data-bs-target="#walkoutEditModal" data-visit-id="{{ row.id }}" data-visit-number="{{ row.visit_number }}" data-customer="{{ row.customer_name }}" data-mobile="{{ row.mobile_number }}" data-product="{{ row.product }}" data-category="{{ row.category }}" data-status="{{ row.status }}" data-reason="{{ row.reason if row.reason != 'Not recorded' else '' }}" data-competitor="{{ row.competitor if row.competitor != 'Not recorded' else '' }}"><i class="bi bi-pencil-square me-1" aria-hidden="true"></i>Edit</button></div>{% else %}<div class="text-success small"><i class="bi bi-lock-fill me-1" aria-hidden="true"></i>Locked</div>{% endif %}</td>
+                    </tr>
+                    {% else %}<tr><td colspan="10" class="text-center text-muted py-5"><i class="bi bi-journal-check fs-2 d-block mb-2"></i>No walkouts for the selected filters. Try Show all dates.</td></tr>{% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {{ pager(report_pages.walkout, 'Walkout') }}
     </section>
 
+{% if not standalone_walkout %}
     <section class="tab-pane fade {% if active_tab == 'competitor' %}show active{% endif %}" id="competitor-panel" role="tabpanel" aria-labelledby="competitor-tab">
         <form method="get" action="/cre/reports" class="card border-0 shadow-sm p-3 mb-4">
+            <input type="hidden" name="per_page" value="{{ per_page }}">
             <input type="hidden" name="tab" value="competitor">
             <div class="row g-2 align-items-end">
                 <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="competitor-from">From</label><input class="form-control" id="competitor-from" type="date" name="date_from" value="{{ date_from.isoformat() }}"></div>
@@ -113,11 +206,13 @@
                 <div class="col-sm-6 col-lg-2 d-grid"><button class="btn btn-danger" type="submit"><i class="bi bi-funnel me-1"></i>Apply filter</button></div>
             </div>
         </form>
-        <div class="row g-4"><div class="col-lg-4"><section class="card report-card border shadow-sm"><div class="card-header bg-white border-0 pt-3"><h2 class="h6 mb-0">Lost to competitor's shop</h2></div><div class="table-responsive"><table class="table table-bordered table-sm"><thead><tr><th>Competitor</th><th class="text-end">Walkouts</th></tr></thead><tbody>{% for row in report.competitor_rows %}<tr><td>{{ row.name }}</td><td class="text-end">{{ row.count }}</td></tr>{% else %}<tr><td colspan="2" class="text-center text-muted py-3">No competitor information.</td></tr>{% endfor %}{% if report.competitor_rows %}<tr class="report-total-row"><td>Total</td><td class="text-end">{{ report.summary.walkouts }}</td></tr>{% endif %}</tbody></table></div></section></div><div class="col-lg-8"><div class="card border shadow-sm"><div class="card-header bg-white border-0 pt-3"><h2 class="h6 mb-0">Competitor loss details</h2></div><div class="table-responsive"><table class="table table-hover report-data-table mb-0"><thead><tr><th>Date</th><th>Customer</th><th>Store</th><th>Competitor</th><th>Reason</th><th>Manager</th></tr></thead><tbody>{% for row in report.walkout_rows if row.competitor != 'Not recorded' %}<tr><td class="text-nowrap">{{ row.date.strftime('%d %b %Y, %I:%M %p') }}</td><td>{{ row.customer_name }}</td><td>{{ row.store_name }}</td><td>{{ row.competitor }}</td><td>{{ row.reason }}</td><td>{{ row.manager }}</td></tr>{% else %}<tr><td colspan="6" class="text-center text-muted py-4">No competitor losses for the selected filters.</td></tr>{% endfor %}</tbody></table></div></div></div></div>
+        <div class="row g-4"><div class="col-lg-4"><section class="card report-card border shadow-sm"><div class="card-header bg-white border-0 pt-3"><h2 class="h6 mb-0">Lost to competitor's shop</h2></div><div class="table-responsive"><table class="table table-bordered table-sm"><thead><tr><th>Competitor</th><th class="text-end">Walkouts</th></tr></thead><tbody>{% for row in report.competitor_rows %}<tr><td>{{ row.name }}</td><td class="text-end">{{ row.count }}</td></tr>{% else %}<tr><td colspan="2" class="text-center text-muted py-3">No competitor information.</td></tr>{% endfor %}{% if report.competitor_rows %}<tr class="report-total-row"><td>Total</td><td class="text-end">{{ report.summary.walkouts }}</td></tr>{% endif %}</tbody></table></div></section></div><div class="col-lg-8"><div class="card border shadow-sm"><div class="card-header bg-white border-0 pt-3"><h2 class="h6 mb-0">Competitor loss details</h2></div><div class="table-responsive"><table class="table table-hover report-data-table mb-0"><thead><tr><th>Date</th><th>Visit No.</th><th>Customer</th><th>Store</th><th>Competitor</th><th>Reason</th><th>Manager</th></tr></thead><tbody>{% for row in report.competitor_visits %}<tr><td class="text-nowrap">{{ row.date|ist }}</td><td class="cre-visit-reference">{{ row.visit_number }}</td><td>{{ row.customer_name }}</td><td>{{ row.store_name }}</td><td>{{ row.competitor }}</td><td>{{ row.reason }}</td><td>{{ row.manager }}</td></tr>{% else %}<tr><td colspan="7" class="text-center text-muted py-4">No competitor losses for the selected filters.</td></tr>{% endfor %}</tbody></table></div></div></div></div>
+        {{ pager(report_pages.competitor, 'Competitor') }}
     </section>
 
     <section class="tab-pane fade {% if active_tab == 'manager' %}show active{% endif %}" id="manager-panel" role="tabpanel" aria-labelledby="manager-tab">
         <form method="get" action="/cre/reports" class="card border-0 shadow-sm p-3 mb-4">
+            <input type="hidden" name="per_page" value="{{ per_page }}">
             <input type="hidden" name="tab" value="manager">
             <div class="row g-2 align-items-end">
                 <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="manager-from">From</label><input class="form-control" id="manager-from" type="date" name="date_from" value="{{ date_from.isoformat() }}"></div>
@@ -127,11 +222,13 @@
                 <div class="col-sm-6 col-lg-2 d-grid"><button class="btn btn-danger" type="submit"><i class="bi bi-funnel me-1"></i>Apply filter</button></div>
             </div>
         </form>
-        <div class="card border shadow-sm"><div class="card-header bg-white border-0 pt-3"><h2 class="h6 mb-0">Manager performance report</h2></div><div class="table-responsive"><table class="table table-hover report-data-table mb-0"><thead><tr><th>Manager</th><th class="text-end">Total visits</th><th class="text-end">Walkouts</th><th class="text-end">Billed</th><th class="text-end">Conversion</th></tr></thead><tbody>{% for row in report.manager_rows %}<tr><td>{{ row.name }}</td><td class="text-end">{{ row.visits }}</td><td class="text-end text-danger">{{ row.walkouts }}</td><td class="text-end text-success">{{ row.billed }}</td><td class="text-end">{{ '%.2f'|format(row.conversion_rate) }}%</td></tr>{% else %}<tr><td colspan="5" class="text-center text-muted py-4">No manager data for the selected filters.</td></tr>{% endfor %}{% if report.manager_rows %}<tr class="report-total-row"><td>Total</td><td class="text-end">{{ report.summary.total }}</td><td class="text-end">{{ report.summary.walkouts }}</td><td class="text-end">{{ report.summary.billed }}</td><td class="text-end">{{ '%.2f'|format(report.summary.billed_percent) }}%</td></tr>{% endif %}</tbody></table></div></div>
+        <div class="card border shadow-sm"><div class="card-header bg-white border-0 pt-3"><h2 class="h6 mb-0">Manager performance report</h2></div><div class="table-responsive"><table class="table table-hover report-data-table mb-0"><thead><tr><th>Manager</th><th class="text-end">Total visits</th><th class="text-end">Walkouts</th><th class="text-end">Billed</th><th class="text-end">Conversion</th></tr></thead><tbody>{% for row in report.manager_page_rows %}<tr><td>{{ row.name }}</td><td class="text-end">{{ row.visits }}</td><td class="text-end text-danger">{{ row.walkouts }}</td><td class="text-end text-success">{{ row.billed }}</td><td class="text-end">{{ '%.2f'|format(row.conversion_rate) }}%</td></tr>{% else %}<tr><td colspan="5" class="text-center text-muted py-4">No manager data for the selected filters.</td></tr>{% endfor %}{% if report.manager_rows %}<tr class="report-total-row"><td>Total</td><td class="text-end">{{ report.summary.total }}</td><td class="text-end">{{ report.summary.walkouts }}</td><td class="text-end">{{ report.summary.billed }}</td><td class="text-end">{{ '%.2f'|format(report.summary.billed_percent) }}%</td></tr>{% endif %}</tbody></table></div></div>
+        {{ pager(report_pages.manager, 'Manager') }}
     </section>
 
     <section class="tab-pane fade {% if active_tab == 'sales' %}show active{% endif %}" id="sales-panel" role="tabpanel" aria-labelledby="sales-tab">
         <form method="get" action="/cre/reports" class="card border-0 shadow-sm p-3 mb-4">
+            <input type="hidden" name="per_page" value="{{ per_page }}">
             <input type="hidden" name="tab" value="sales">
             <div class="row g-2 align-items-end">
                 <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="sales-from">From</label><input class="form-control" id="sales-from" type="date" name="date_from" value="{{ date_from.isoformat() }}"></div>
@@ -141,7 +238,93 @@
                 <div class="col-sm-6 col-lg-2 d-grid"><button class="btn btn-danger" type="submit"><i class="bi bi-funnel me-1"></i>Apply filter</button></div>
             </div>
         </form>
-        <div class="card border shadow-sm"><div class="card-header bg-white border-0 pt-3"><h2 class="h6 mb-0">Sales person performance report</h2></div><div class="table-responsive"><table class="table table-hover report-data-table mb-0"><thead><tr><th>Sales person</th><th class="text-end">Total visits</th><th class="text-end">Walkouts</th><th class="text-end">Billed</th><th class="text-end">Conversion</th></tr></thead><tbody>{% for row in report.sales_rows %}<tr><td>{{ row.name }}</td><td class="text-end">{{ row.visits }}</td><td class="text-end text-danger">{{ row.walkouts }}</td><td class="text-end text-success">{{ row.billed }}</td><td class="text-end">{{ '%.2f'|format(row.conversion_rate) }}%</td></tr>{% else %}<tr><td colspan="5" class="text-center text-muted py-4">No sales data for the selected filters.</td></tr>{% endfor %}{% if report.sales_rows %}<tr class="report-total-row"><td>Total</td><td class="text-end">{{ report.summary.total }}</td><td class="text-end">{{ report.summary.walkouts }}</td><td class="text-end">{{ report.summary.billed }}</td><td class="text-end">{{ '%.2f'|format(report.summary.billed_percent) }}%</td></tr>{% endif %}</tbody></table></div></div>
+        <div class="card border shadow-sm"><div class="card-header bg-white border-0 pt-3"><h2 class="h6 mb-0">Sales person performance report</h2></div><div class="table-responsive"><table class="table table-hover report-data-table mb-0"><thead><tr><th>Sales person</th><th class="text-end">Total visits</th><th class="text-end">Walkouts</th><th class="text-end">Billed</th><th class="text-end">Conversion</th></tr></thead><tbody>{% for row in report.sales_page_rows %}<tr><td>{{ row.name }}</td><td class="text-end">{{ row.visits }}</td><td class="text-end text-danger">{{ row.walkouts }}</td><td class="text-end text-success">{{ row.billed }}</td><td class="text-end">{{ '%.2f'|format(row.conversion_rate) }}%</td></tr>{% else %}<tr><td colspan="5" class="text-center text-muted py-4">No sales data for the selected filters.</td></tr>{% endfor %}{% if report.sales_rows %}<tr class="report-total-row"><td>Total</td><td class="text-end">{{ report.summary.total }}</td><td class="text-end">{{ report.summary.walkouts }}</td><td class="text-end">{{ report.summary.billed }}</td><td class="text-end">{{ '%.2f'|format(report.summary.billed_percent) }}%</td></tr>{% endif %}</tbody></table></div></div>
+        {{ pager(report_pages.sales, 'Sales') }}
     </section>
+{% endif %}
 </div>
+</div>
+
+<div class="modal fade report-followup-modal" id="followupModal" tabindex="-1" aria-labelledby="followupModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered"><div class="modal-content shadow">
+        <form method="post" id="followupForm">
+            <input type="hidden" name="return_to" value="{{ report_return_to }}">
+            <div class="modal-header"><div><div class="text-danger small fw-semibold text-uppercase mb-1">Customer follow-up</div><h2 class="modal-title h5" id="followupModalTitle">Add follow-up</h2><div class="small text-muted" id="followupCustomer"></div></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+            <div class="modal-body"><label for="followupNote" class="form-label fw-semibold">Follow-up note</label><textarea id="followupNote" class="form-control" name="note" rows="5" maxlength="1000" placeholder="Record the conversation, customer response, or next step…" required></textarea><div class="rounded-3 bg-warning-subtle p-3 small mt-3"><i class="bi bi-lock me-1" aria-hidden="true"></i>Once saved, this note is permanent and cannot be edited. Please review before saving.</div></div>
+            <div class="modal-footer"><button class="btn btn-light" type="button" data-bs-dismiss="modal">Cancel</button><button class="btn btn-danger" type="submit"><i class="bi bi-lock-fill me-1" aria-hidden="true"></i>Save &amp; lock follow-up</button></div>
+        </form>
+    </div></div>
+</div>
+<div class="modal fade report-followup-modal" id="walkoutEditModal" tabindex="-1" aria-labelledby="walkoutEditTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content shadow">
+        <form method="post" id="walkoutEditForm">
+            <input type="hidden" name="return_to" value="{{ report_return_to }}">
+            <div class="modal-header"><div><div class="text-danger small fw-semibold text-uppercase mb-1" id="walkoutEditReference"></div><h2 class="modal-title h5" id="walkoutEditTitle">Edit walkout details</h2></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+            <div class="modal-body">
+                <div class="rounded-3 border bg-light p-3 mb-4"><div class="small fw-semibold mb-3"><i class="bi bi-lock me-1" aria-hidden="true"></i>Customer details are locked</div><dl class="row mb-0 small"><div class="col-sm-6"><dt>Name</dt><dd id="walkoutLockedName"></dd></div><div class="col-sm-6"><dt>Mobile</dt><dd id="walkoutLockedMobile"></dd></div><div class="col-sm-6"><dt>Product Type</dt><dd id="walkoutLockedProduct" class="mb-sm-0"></dd></div><div class="col-sm-6"><dt>Category Type</dt><dd id="walkoutLockedCategory" class="mb-0"></dd></div></dl></div>
+                <div class="row g-3"><div class="col-12"><label class="form-label" for="walkoutEditStatus">Status</label><select class="form-select" id="walkoutEditStatus" name="status" required><option value="Walkout">Walkout</option><option value="Billed">Billed</option></select></div>
+                <div class="col-md-6"><label class="form-label" for="walkoutEditReason">Walkout Reason</label><select class="form-select" id="walkoutEditReason" name="walkout_reason" required><option value="">Choose reason</option>{% for reason in editable_walkout_reasons %}<option value="{{ reason }}">{{ reason }}</option>{% endfor %}</select></div>
+                <div class="col-md-6"><label class="form-label" for="walkoutEditCompetitor">Competitor (optional)</label><select class="form-select" id="walkoutEditCompetitor" name="competitor_shop"><option value="">Not recorded</option>{% for competitor in editable_competitor_shops %}<option value="{{ competitor }}">{{ competitor }}</option>{% endfor %}</select></div></div>
+                <p class="small text-muted mt-3 mb-0"><i class="bi bi-info-circle me-1" aria-hidden="true"></i>Saving as Billed permanently locks this entry. Saved follow-ups remain unchanged.</p>
+            </div>
+            <div class="modal-footer"><button class="btn btn-light" type="button" data-bs-dismiss="modal">Cancel</button><button class="btn btn-danger" type="submit"><i class="bi bi-check2 me-1" aria-hidden="true"></i>Save changes</button></div>
+        </form>
+    </div></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const modal = document.getElementById('followupModal');
+    const form = document.getElementById('followupForm');
+    modal.addEventListener('show.bs.modal', function (event) {
+        const trigger = event.relatedTarget;
+        if (!trigger) return;
+        form.reset();
+        form.action = '/cre/reports/walkouts/' + trigger.dataset.visitId + '/followups/' + trigger.dataset.slot;
+        document.getElementById('followupModalTitle').textContent = 'Follow-up ' + trigger.dataset.slot;
+        document.getElementById('followupCustomer').textContent = trigger.dataset.customer;
+        form.querySelector('button[type="submit"]').disabled = false;
+    });
+    modal.addEventListener('shown.bs.modal', function () { document.getElementById('followupNote').focus(); });
+    form.addEventListener('submit', function () { form.querySelector('button[type="submit"]').disabled = true; });
+    const editModal = document.getElementById('walkoutEditModal');
+    const editForm = document.getElementById('walkoutEditForm');
+    function selectExisting(select, value) {
+        select.querySelectorAll('[data-legacy-option]').forEach(option => option.remove());
+        if (value && !Array.from(select.options).some(option => option.value === value)) {
+            const option = new Option(value + ' (removed)', value);
+            option.dataset.legacyOption = 'true';
+            select.add(option);
+        }
+        select.value = value;
+    }
+    editModal.addEventListener('show.bs.modal', function (event) {
+        const trigger = event.relatedTarget;
+        if (!trigger) return;
+        editForm.reset();
+        editForm.action = '/cre/reports/walkouts/' + trigger.dataset.visitId + '/edit';
+        document.getElementById('walkoutEditReference').textContent = trigger.dataset.visitNumber;
+        for (const [id, key] of [['walkoutLockedName','customer'],['walkoutLockedMobile','mobile'],['walkoutLockedProduct','product'],['walkoutLockedCategory','category']]) {
+            document.getElementById(id).textContent = trigger.dataset[key];
+        }
+        document.getElementById('walkoutEditStatus').value = 'Walkout';
+        selectExisting(document.getElementById('walkoutEditReason'), trigger.dataset.reason);
+        selectExisting(document.getElementById('walkoutEditCompetitor'), trigger.dataset.competitor);
+        editForm.querySelector('button[type="submit"]').disabled = false;
+    });
+    editModal.addEventListener('shown.bs.modal', function () { document.getElementById('walkoutEditStatus').focus(); });
+    editForm.addEventListener('submit', function () { editForm.querySelector('button[type="submit"]').disabled = true; });
+    document.querySelectorAll('#reportTabs button').forEach(function (button) {
+        button.addEventListener('shown.bs.tab', function () {
+            const tab = button.id.replace('-tab', '');
+            document.getElementById('reportActiveTab').value = tab;
+            const url = new URL(window.location.href);
+            url.searchParams.set('tab', tab);
+            window.history.replaceState(null, '', url);
+        });
+    });
+});
+</script>
 {% endblock %}

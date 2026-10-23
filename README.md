@@ -110,6 +110,52 @@ changes, including removed choices. The six business tables and historical visit
 values are unchanged; migration from the main backend still copies only those
 six source tables, with this local configuration initialized on server startup.
 
+The sidebar opens a dedicated **Walkout Register** page at `/cre/walkout-register`,
+showing all dates by default, a full-width register, and registered/current/recovered/
+pending-follow-up metrics. Its Excel download contains one sheet with these exact
+columns: Visit Number, Name, Mobile, Product Type, Category Type, Sales Person,
+Meet by Manager, Walkout Reason, Status, Follow up 1, Follow up 2, Follow up 3.
+Download filters match the page filters; recovered Billed visits stay included.
+The register's Edit popup permits only Status, Walkout Reason, and Competitor.
+Customer identity, product/category, staff assignment, remarks, and follow-ups
+remain unchanged by this edit. The latest reason/competitor are retained in
+reports after billing; Billed entries remain locked.
+Each visit has three sequential follow-ups: save a note once and it is
+permanently locked, with its author and timestamp. Final status can change
+from Walkout to Billed. Billed visits are permanently read-only, including
+details, status, and new follow-ups. Recovered customers
+remain in the register with the original walkout details, while report totals
+use their current status. Excel exports include the register and all three notes.
+
+Startup migration `002` in `walkout_followups.py` adds `cre_walkout_records` and
+`cre_walkout_followups`, backfills existing Walkout visits, and installs database
+triggers that reject follow-up updates/deletes. It is safe to run repeatedly.
+Historical walkouts converted before this feature cannot be reconstructed if
+their original walkout details were already cleared.
+
+Products also manages the category dropdown. Add your category names there;
+new visits require both a Product Type and Category. Existing visits keep an
+unrecorded category until explicitly selected while editing an unbilled visit.
+Migration `003` in `visit_categories.py` adds the category foreign key without
+rewriting historical entries and installs database triggers protecting billed visits.
+
+Each saved visit has a permanent reference such as `CRE-000105`, derived from
+the database primary key. Database allocation keeps concurrent users' entries
+distinct; no client calculates the next number. The reference is shown in the
+dashboard, visit details, both report registers, and the Excel walkout register.
+Search the dashboard using the full reference. S.No. remains the current list
+position, so it can change with filtering and sorting. References do not reset
+at midnight; the daily dashboard counts do. Numbers may have gaps.
+
+Dashboard, report registers, competitor details, and manager/sales detail tables
+default to 20 rows per page with numbered Previous/Next navigation. The
+**Entries per page** dropdown offers 10, 20, 50, or 100 rows; click Apply after
+choosing a size. Changing size resets pagination to page one and retains filters.
+Each report table
+has its own page parameter; filters are retained during navigation and reset
+pagination when reapplied. Summary metrics and Excel downloads always cover the
+entire filtered dataset.
+
 CRE login/logout; dashboard/search/pagination; customer visit creation, editing
 and billed/walkout statuses; sales people and managers; product types; dynamic
 form fields including removal/restoration; report filters and Excel export.
@@ -119,6 +165,18 @@ not included. The legacy `/admin/customer-relations` bookmark redirects locally
 to CRE; the main application's admin routes do not exist here.
 
 ## Verification and backup
+
+Database queries, password verification, template rendering and Excel generation
+run in FastAPI's worker threads so slow synchronous work does not block the event
+loop. Request form bodies are parsed asynchronously before business work starts.
+Gzip compression is enabled for clients that accept it, for responses above 1 KB.
+Daily dashboard counts use one aggregate query, and dashboard rows preload stores.
+Startup migration `004` in `query_indexes.py` adds composite indexes for date-based
+status, sales-person, manager and store filters without rewriting existing data.
+Reports and Excel downloads still cover the full filtered dataset; very large
+exports can use significant memory. Concurrency tests cover a slow password check,
+mixed dashboard/report requests and simultaneous visit creation. These checks do
+not establish a production capacity limit; measure expected traffic on the host.
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, UniqueConstraint, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, UniqueConstraint, CheckConstraint, Text, ForeignKey
 
 from sqlalchemy.sql import func
 
@@ -75,6 +75,14 @@ class CustomerFormField(Base):
     created_by = Column(Integer, ForeignKey("admin_users.id"), nullable=True)
     created_at = Column(DateTime, default=func.now(), nullable=False)
 
+
+class CustomerProductCategory(Base):
+    __tablename__ = 'customer_product_categories'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(80, collation='NOCASE'), unique=True, nullable=False)
+    created_by = Column(Integer, ForeignKey('admin_users.id'), nullable=True)
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+
 class CreStaffMember(Base):
     __tablename__ = "cre_staff_members"
 
@@ -99,10 +107,15 @@ class CreVisitOption(Base):
 class CustomerVisit(Base):
     __tablename__ = "customer_visits"
 
+    @property
+    def visit_number(self):
+        return f'CRE-{self.id:06d}' if self.id is not None else None
+
     id = Column(Integer, primary_key=True, index=True)
     customer_name = Column(String(120), nullable=False)
     mobile_number = Column(String(24), nullable=False, index=True)
     product_type_id = Column(Integer, ForeignKey("customer_product_types.id"), nullable=False)
+    category_id = Column(Integer, ForeignKey('customer_product_categories.id'), nullable=True)
     handled_by_id = Column(Integer, ForeignKey("cre_staff_members.id"), nullable=True, index=True)
     assigned_manager_id = Column(Integer, ForeignKey("cre_staff_members.id"), nullable=True, index=True)
     store_id = Column(Integer, ForeignKey("stores.id"), nullable=True, index=True)
@@ -117,7 +130,34 @@ class CustomerVisit(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
 
     product_type = relationship("CustomerProductType")
+    category = relationship('CustomerProductCategory')
     handled_by = relationship("CreStaffMember", foreign_keys=[handled_by_id])
     assigned_manager = relationship("CreStaffMember", foreign_keys=[assigned_manager_id])
     store = relationship("Store", foreign_keys=[store_id])
     creator = relationship("AdminUser", foreign_keys=[created_by])
+    walkout_record = relationship("CreWalkoutRecord", uselist=False)
+    followups = relationship("CreWalkoutFollowup", order_by="CreWalkoutFollowup.slot")
+
+
+class CreWalkoutRecord(Base):
+    __tablename__ = 'cre_walkout_records'
+    visit_id = Column(Integer, ForeignKey('customer_visits.id'), primary_key=True)
+    reason = Column(String(80), nullable=True)
+    competitor = Column(String(100), nullable=True)
+    remark = Column(Text, nullable=True)
+    recorded_at = Column(DateTime, default=func.now(), nullable=False)
+
+
+class CreWalkoutFollowup(Base):
+    __tablename__ = 'cre_walkout_followups'
+    __table_args__ = (
+        UniqueConstraint('visit_id', 'slot'),
+        CheckConstraint('slot BETWEEN 1 AND 3'),
+    )
+    id = Column(Integer, primary_key=True)
+    visit_id = Column(Integer, ForeignKey('customer_visits.id'), nullable=False, index=True)
+    slot = Column(Integer, nullable=False)
+    note = Column(Text, nullable=False)
+    created_by = Column(Integer, ForeignKey('admin_users.id'), nullable=False)
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    author = relationship('AdminUser')

@@ -6,16 +6,41 @@
     <title>CRE Login - Anand Jewels</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="/static/responsive.css?v=1" rel="stylesheet">
+    <link href="/static/responsive.css?v=2" rel="stylesheet">
+    <meta name="theme-color" content="#b62836">
+    <style>
+        .cre-login-backdrop {
+            background: linear-gradient(105deg, #b62836, #8b1e2d);
+        }
+        .cre-login-brand {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 224px;
+            max-width: 100%;
+            margin: 0 auto 1.5rem;
+            padding: 18px 24px;
+            border: 1px solid #c9a45f;
+            border-radius: 16px;
+            background: linear-gradient(105deg, #b62836, #8b1e2d);
+            box-shadow: 0 8px 22px rgba(66, 19, 34, .16);
+        }
+        .cre-login-brand img {
+            display: block;
+            width: 174px;
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
 </head>
 <body class="bg-light cre-login">
-<main class="min-vh-100 d-flex align-items-center py-4" style="background:linear-gradient(135deg,#b91c1c,#7f1d1d);">
+<main class="min-vh-100 d-flex align-items-center py-4 cre-login-backdrop">
     <div class="container">
         <div class="row justify-content-center">
             <div class="col-12 col-sm-10 col-md-8 col-lg-6 col-xl-4 cre-login-column">
                 <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
                     <div class="text-center px-4 pt-5 pb-3">
-                        <img src="/static/images/logo.png" alt="Anand Jewels" style="height:68px;max-width:220px;object-fit:contain;">
+                        <div class="cre-login-brand"><img src="/static/images/logo.png" alt="Anand Jewels" width="174" height="134"></div>
                         <h1 class="h4 mt-3 mb-1">Customer Relations</h1>
                         <p class="text-muted mb-0">Sign in to the CRE workspace</p>
                     </div>

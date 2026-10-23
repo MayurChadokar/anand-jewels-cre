@@ -1,14 +1,50 @@
 {% extends "base.html" %}
+{% from "_pagination.html" import pager %}
 
 {% block title %}CRE Dashboard - Anand Jewels{% endblock %}
 
 {% block content %}
 <style>
-    .cre-stat { border: 0; border-radius: 14px; box-shadow: 0 4px 18px rgba(28, 35, 48, .07); height: 100%; }
+    .cre-stat { border: 1px solid #e8eaf0; border-radius: 18px; box-shadow: 0 6px 24px rgba(28, 35, 48, .04); height: 100%; overflow: hidden; }
+    .cre-stat .card-body { padding: 1.35rem; }
+    .cre-stat-icon { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 14px; background: #f0edff; color: #6d4bc3; font-size: 1.25rem; }
+    .cre-stat-draft { border-bottom: 3px solid #e8ad32; }
+    .cre-stat-draft .cre-stat-icon { background: #fff4d9; color: #946200; }
+    .cre-stat-billed { border-bottom: 3px solid #23a570; }
+    .cre-stat-billed .cre-stat-icon { background: #dcf5e8; color: #14764c; }
+    .cre-stat-walkout { border-bottom: 3px solid #e76565; }
+    .cre-stat-walkout .cre-stat-icon { background: #ffe6e6; color: #bd3030; }
+    .cre-dashboard-heading { padding: 1.5rem; border: 1px solid #eedfdf; border-radius: 20px; background: linear-gradient(115deg, #fff, #fff6ee); }
+    .cre-dashboard-heading h1 { font-weight: 700; letter-spacing: -.035em; }
+    .cre-visits-card { border-radius: 20px; overflow: hidden; }
+    .cre-visits-card > .card-header { border-bottom: 1px solid #edf0f4 !important; }
+    .cre-visit-filters { padding: .85rem; border-radius: 14px; background: #f7f8fb; width: 100%; }
+    .cre-visit-filters .form-control, .cre-visit-filters .form-select { flex: 1 1 145px; min-height: 38px; border-color: #e1e5ed; border-radius: 9px; }
+    .cre-visit-filters .form-control { flex-grow: 2; }
     .cre-stat .stat-value { font-size: 1.8rem; font-weight: 750; line-height: 1.1; }
     .cre-stat .stat-label { color: #697386; font-size: .88rem; }
     .cre-table th { white-space: nowrap; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: #697386; }
     .cre-table td { vertical-align: middle; }
+    .cre-table { min-width: 1380px; font-size: .85rem; }
+    .cre-table tbody td { padding: 1.05rem .85rem; border-bottom-color: rgba(31, 41, 55, .07); }
+    .cre-table .cre-row-billed { --bs-table-bg: #e8f7ee; --bs-table-hover-bg: #d8f0e3; }
+    .cre-table .cre-row-walkout { --bs-table-bg: #fff0ef; --bs-table-hover-bg: #ffe2df; }
+    .cre-table .cre-row-draft { --bs-table-bg: #fffdf5; --bs-table-hover-bg: #fff6db; }
+    .cre-table .cre-row-other { --bs-table-bg: #fff; --bs-table-hover-bg: #f2f6fc; }
+    .cre-table tr > td:first-child { border-left: 3px solid transparent; }
+    .cre-table .cre-row-billed > td:first-child { border-left-color: #23a570; }
+    .cre-table .cre-row-walkout > td:first-child { border-left-color: #df5151; }
+    .cre-table .cre-row-draft > td:first-child { border-left-color: #e8ad32; }
+    .cre-status { display: inline-flex; align-items: center; gap: .4rem; padding: .45rem .7rem; border-radius: 8px; font-size: .75rem; font-weight: 700; white-space: nowrap; background: #e8eefb; color: #36578f; }
+    .cre-status-billed { background: #157347; color: #fff; }
+    .cre-status-walkout { background: #bd3030; color: #fff; }
+    .cre-status-draft { background: #fff0bd; color: #785300; }
+    .cre-action { display: inline-flex; align-items: center; justify-content: center; width: 35px; height: 35px; padding: 0; border: 1px solid #dce1e8; border-radius: 10px; color: #46536b; background: #fff; }
+    .cre-action:hover { color: #a32121; border-color: #d8a8a8; background: #fff5f5; }
+    .cre-action:focus-visible { outline: 3px solid #a32121; outline-offset: 2px; }
+    .cre-staff-name { min-width: 135px; overflow-wrap: anywhere; }
+    .cre-legend { display: inline-flex; align-items: center; gap: .4rem; font-size: .75rem; color: #697386; }
+    .cre-legend-dot { width: 8px; height: 8px; border-radius: 50%; }
     .cre-visits-scroll { max-height: min(65vh, 700px); overflow: auto; }
     .cre-visits-scroll .cre-table thead th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; }
     .cre-status-form { min-width: 0; }
@@ -19,13 +55,37 @@
     .cre-table .badge { font-size: .75rem; }
     .cre-customer-submit-footer { position: sticky; bottom: 0; z-index: 2; background: #fff; border-top: 1px solid #e9ecef; }
     .cre-add-customer-modal .modal-dialog { max-height: calc(100vh - 2rem); }
-    .cre-add-customer-modal .modal-content { max-height: calc(100vh - 2rem); }
-    .cre-add-customer-modal .modal-body { max-height: calc(100vh - 10rem); overflow-y: auto; overscroll-behavior: contain; }
+    .cre-add-customer-modal .modal-content { max-height: calc(100vh - 2rem); max-height: calc(100dvh - 2rem); }
+    .cre-add-customer-modal .modal-content > form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+    .cre-add-customer-modal .modal-header,
+    .cre-add-customer-modal .modal-footer { flex-shrink: 0; }
+    .cre-add-customer-modal .modal-body { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+    .cre-app #addCustomerModal .form-label { color: #423844; font-size: 1rem; font-weight: 600; }
+    .cre-app #addCustomerModal .form-control,
+    .cre-app #addCustomerModal .form-select { color: #302d36; font-size: 1rem; line-height: 1.5; min-height: 48px; }
+    .cre-app #addCustomerModal .form-control::placeholder { color: #756b76; opacity: 1; }
     .cre-view-data dt { color: #697386; font-size: .78rem; font-weight: 600; }
     .cre-view-data dd { overflow-wrap: anywhere; white-space: pre-wrap; }
+    .cre-visit-modal { --bs-modal-border-radius: 22px; }
+    .cre-visit-modal .modal-content { border-radius: 22px; overflow: hidden; }
+    .cre-visit-modal .modal-header { padding: 1.4rem 1.5rem; background: linear-gradient(120deg, #fff3e4, #fff5f5); border-bottom: 1px solid #eedfdf; }
+    .cre-visit-modal .modal-title { font-weight: 700; letter-spacing: -.025em; }
+    .cre-visit-modal .modal-body { padding: 1.5rem; }
+    .cre-visit-modal .modal-footer { padding: 1rem 1.5rem; background: #fafbfc; border-top: 1px solid #edf0f4; gap: .5rem; }
+    .cre-visit-modal .form-control, .cre-visit-modal .form-select { border-radius: 10px; border-color: #dfe3eb; min-height: 43px; }
+    .cre-visit-modal .form-control:focus, .cre-visit-modal .form-select:focus { border-color: #c36363; box-shadow: 0 0 0 3px #b3262614; }
+    .cre-visit-modal .form-label { font-size: .8rem; font-weight: 600; color: #556176; }
+    .cre-visit-modal .btn { border-radius: 10px; }
+    .cre-visit-modal .cre-view-data > div { margin-bottom: .8rem; }
+    .cre-visit-modal .cre-view-data dd { background: #f7f8fb; border: 1px solid #edf0f4; padding: .7rem .85rem; border-radius: 10px; margin-top: .35rem; }
+    .cre-visit-modal.fade .modal-dialog { transform: translateY(20px) scale(.97); transition: transform .22s ease-out; }
+    .cre-visit-modal.show .modal-dialog { transform: none; }
+    .cre-today-label { display: inline-flex; align-items: center; gap: .5rem; padding: .5rem .8rem; border-radius: 9px; background: #fff; border: 1px solid #e8eaf0; font-size: .8rem; color: #556176; }
+    @media (prefers-reduced-motion: reduce) { .cre-visit-modal.fade .modal-dialog { transition: none; transform: none; } }
+    @media (max-width: 575.98px) { .cre-visit-modal .modal-body, .cre-visit-modal .modal-header { padding: 1rem; } }
 </style>
 
-<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+<div class="cre-dashboard-heading d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
     <div>
         <div class="text-uppercase small fw-semibold text-danger mb-1">Anand Jewels</div>
         <h1 class="h3 mb-1">Customer Relations Dashboard</h1>
@@ -36,6 +96,8 @@
         <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#addCustomerModal">
             <i class="bi bi-person-plus me-1"></i> Add Walk-in Customer
         </button>
+        {% elif can_manage and not categories %}
+        <a class="btn btn-danger" href="/cre/products#categories"><i class="bi bi-plus-lg me-1"></i>Add a Category First</a>
         {% elif can_manage %}
         <a class="btn btn-danger" href="/cre/products"><i class="bi bi-plus-lg me-1"></i>Add a Product First</a>
         {% else %}
@@ -47,22 +109,28 @@
 {% if message %}<div class="alert alert-success alert-dismissible fade show" role="alert"><i class="bi bi-check-circle me-2"></i>{{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>{% endif %}
 {% if error %}<div class="alert alert-danger alert-dismissible fade show" role="alert"><i class="bi bi-exclamation-circle me-2"></i>{{ error }}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>{% endif %}
 
-<div class="row g-3 mb-4">
-    <div class="col-6 col-xl-3"><div class="card cre-stat"><div class="card-body"><div class="stat-value">{{ total_visits }}</div><div class="stat-label mt-2">Customer visits</div></div></div></div>
-    <div class="col-6 col-xl-3"><div class="card cre-stat"><div class="card-body"><div class="stat-value text-warning">{{ draft_count }}</div><div class="stat-label mt-2">Draft</div></div></div></div>
-    <div class="col-6 col-xl-3"><div class="card cre-stat"><div class="card-body"><div class="stat-value text-success">{{ billed_count }}</div><div class="stat-label mt-2">Billed</div></div></div></div>
-    <div class="col-6 col-xl-3"><div class="card cre-stat"><div class="card-body"><div class="stat-value text-secondary">{{ sales_people_count }}</div><div class="stat-label mt-2">Sales people</div></div></div></div>
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <div class="cre-today-label"><i class="bi bi-calendar3" aria-hidden="true"></i><strong>Today's overview</strong><span id="creSummaryDate">{{ summary_date }}</span></div>
+    <small class="text-muted">Resets daily at 12:00 AM IST</small>
+</div>
+<div class="row g-3 mb-4" id="creDailySummary" data-resets-at="{{ resets_at }}" aria-live="polite" aria-atomic="true">
+    <div class="col-6 col-xl-3"><div class="card cre-stat"><div class="card-body"><div class="d-flex justify-content-between align-items-center gap-2"><div class="stat-value" data-daily-count="total_visits">{{ total_visits }}</div><span class="cre-stat-icon"><i class="bi bi-people" aria-hidden="true"></i></span></div><div class="stat-label mt-2">Customer visits</div></div></div></div>
+    <div class="col-6 col-xl-3"><div class="card cre-stat cre-stat-draft"><div class="card-body"><div class="d-flex justify-content-between align-items-center gap-2"><div class="stat-value" style="color:#946200" data-daily-count="draft_count">{{ draft_count }}</div><span class="cre-stat-icon"><i class="bi bi-hourglass-split" aria-hidden="true"></i></span></div><div class="stat-label mt-2">Draft visits</div></div></div></div>
+    <div class="col-6 col-xl-3"><div class="card cre-stat cre-stat-billed"><div class="card-body"><div class="d-flex justify-content-between align-items-center gap-2"><div class="stat-value text-success" data-daily-count="billed_count">{{ billed_count }}</div><span class="cre-stat-icon"><i class="bi bi-receipt" aria-hidden="true"></i></span></div><div class="stat-label mt-2">Billed visits</div></div></div></div>
+    <div class="col-6 col-xl-3"><div class="card cre-stat cre-stat-walkout"><div class="card-body"><div class="d-flex justify-content-between align-items-center gap-2"><div class="stat-value text-danger" data-daily-count="walkout_count">{{ walkout_count }}</div><span class="cre-stat-icon"><i class="bi bi-box-arrow-right" aria-hidden="true"></i></span></div><div class="stat-label mt-2">Walkout visits</div></div></div></div>
 </div>
 
-<div class="card border-0 shadow-sm">
+<div class="card cre-visits-card border-0 shadow-sm">
     <div class="card-header bg-white border-0 p-3 p-lg-4">
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
             <div>
                 <h2 class="h5 mb-1">Customer visits</h2>
-                <small class="text-muted">{{ total_filtered }} matching visits · page {{ page }} of {{ total_pages }}</small>
+                <small class="text-muted">{{ total_filtered }} matching visits · page {{ page }} of {{ total_pages }} · Newest first</small>
             </div>
+            <div class="d-flex gap-3" aria-label="Visit row colours"><span class="cre-legend"><span class="cre-legend-dot bg-success"></span>Billed</span><span class="cre-legend"><span class="cre-legend-dot bg-danger"></span>Walkout</span><span class="cre-legend"><span class="cre-legend-dot bg-warning"></span>Draft</span></div>
             <form method="get" action="/cre/dashboard" class="cre-visit-filters d-flex flex-wrap gap-2 align-items-center">
-                <input class="form-control form-control-sm" type="search" name="q" value="{{ query }}" placeholder="Name, mobile, product" aria-label="Search customers" style="width: 185px;">
+                <input type="hidden" name="per_page" value="{{ per_page }}">
+                <input class="form-control form-control-sm" type="search" name="q" value="{{ query }}" placeholder="Visit no., name, mobile, product" aria-label="Search by visit number, name, mobile or product" style="width: 185px;">
                 <select class="form-select form-select-sm" name="activity" aria-label="Filter by status" style="width: 155px;">
                     <option value="">All statuses</option>
                     {% for option in visit_statuses %}<option value="{{ option }}" {% if selected_activity == option %}selected{% endif %}>{{ option }}</option>{% endfor %}
@@ -76,7 +144,7 @@
                     {% for manager_item in managers %}<option value="{{ manager_item.id }}" {% if selected_manager == manager_item.id %}selected{% endif %}>{{ manager_item.name }}</option>{% endfor %}
                 </select>
                 <button class="btn btn-sm btn-outline-danger" type="submit"><i class="bi bi-search me-1"></i>Filter</button>
-                {% if query or selected_activity or selected_sales_person or selected_manager %}<a class="btn btn-sm btn-light" href="/cre/dashboard">Clear</a>{% endif %}
+                {% if query or selected_activity or selected_sales_person or selected_manager %}<a class="btn btn-sm btn-light" href="/cre/dashboard?per_page={{ per_page }}">Clear</a>{% endif %}
             </form>
         </div>
     </div>
@@ -84,60 +152,54 @@
     {% if visits %}
     <div class="table-responsive cre-visits-scroll">
         <table class="table cre-table table-hover mb-0">
-            <thead class="table-light"><tr><th class="ps-3">S.No.</th><th>Customer</th><th>Store</th><th>Product</th><th>Status</th><th>Walkout reason</th><th>Remark</th>{% for column in custom_columns %}<th>{{ column.label }}</th>{% endfor %}<th>Assigned Staff</th><th>Added</th><th>Action</th></tr></thead>
+            <thead class="table-light"><tr><th scope="col" class="ps-3">Visit No.</th><th scope="col">Name</th><th scope="col">Entry Time (IST)</th><th scope="col">Store</th><th scope="col">Product Type</th><th scope="col">Category Type</th><th scope="col">Sales Person</th><th scope="col">Meet by Manager</th><th scope="col">Status</th><th scope="col">Walkout reason</th><th scope="col">Remark</th><th scope="col">Action</th></tr></thead>
             <tbody>
                 {% for row in visits %}
                 {% set visit = row.visit %}
-                <tr>
-                    <td class="ps-3 text-muted small">{{ row.serial_number }}</td>
+                {% set status = visit_status(visit) %}
+                {% set status_style = 'billed' if status == 'Billed' else 'walkout' if status == 'Walkout' else 'draft' if status == 'Draft' else 'other' %}
+                <tr class="cre-row-{{ status_style }}">
+                    <td class="ps-3 cre-visit-reference">{{ visit.visit_number }}</td>
                     <td class="ps-3 cre-customer-name"><div class="fw-semibold">{{ visit.customer_name }}</div><a class="small text-decoration-none" href="tel:{{ visit.mobile_number }}"><i class="bi bi-telephone me-1"></i>{{ visit.mobile_number }}</a></td>
+                    <td class="text-nowrap"><div>{{ visit.created_at|ist('%d %b %Y') }}</div><div class="small text-muted">{{ visit.created_at|ist('%I:%M %p IST') }}</div></td>
                     <td class="small">{{ visit.store.store_name if visit.store else '-' }}</td>
                     <td><span class="badge text-bg-light border">{{ visit.product_type.name }}</span></td>
-                    <td><span class="badge {{ 'text-bg-success' if visit_status(visit) == 'Billed' else 'text-bg-danger' if visit_status(visit) == 'Walkout' else 'text-bg-warning' if visit_status(visit) == 'Draft' else 'text-bg-light border' }}">{{ visit_status(visit) }}</span></td>
+                    <td class="small">{{ visit.category.name if visit.category else 'Not recorded' }}</td>
+                    <td class="cre-staff-name small">{{ visit.handled_by.name if visit.handled_by else 'Not Assigned' }}</td>
+                    <td class="cre-staff-name small">{{ visit.assigned_manager.name if visit.assigned_manager else 'Not Assigned' }}</td>
+                    <td><span class="cre-status cre-status-{{ status_style }}"><i class="bi {{ 'bi-check-circle-fill' if status == 'Billed' else 'bi-box-arrow-right' if status == 'Walkout' else 'bi-clock' if status == 'Draft' else 'bi-circle' }}" aria-hidden="true"></i>{{ status }}</span></td>
                     <td class="small">{{ visit.walkout_reason or '-' }}</td>
                     <td class="cre-remark small">{{ visit.remark or '-' }}</td>
-                    {% for custom_value in row.custom_values %}<td class="cre-dynamic-cell small">{{ custom_value.value or '-' }}</td>{% endfor %}
-                    <td class="small"><div><span class="text-muted">Sales:</span> {{ visit.handled_by.name if visit.handled_by else 'Not Assigned' }}</div><div><span class="text-muted">Manager:</span> {{ visit.assigned_manager.name if visit.assigned_manager else 'Not Assigned' }}</div></td>
-                    <td class="text-nowrap"><small class="text-muted">{{ visit.created_at.strftime('%d %b %Y, %I:%M %p') }}</small></td>
-                    <td><button class="btn btn-sm btn-outline-danger text-nowrap" type="button" data-bs-toggle="modal" data-bs-target="#viewCustomerModal-{{ visit.id }}"><i class="bi bi-eye me-1"></i>View</button></td>
+                    <td class="text-nowrap"><button class="btn cre-action" type="button" data-bs-toggle="modal" data-bs-target="#viewCustomerModal-{{ visit.id }}" title="View customer" aria-label="View {{ visit.customer_name }}"><i class="bi bi-eye" aria-hidden="true"></i></button> {% if visit.status != 'Billed' %}<button class="btn cre-action" type="button" data-bs-toggle="modal" data-bs-target="#viewCustomerModal-{{ visit.id }}" data-cre-action="edit" title="Edit customer" aria-label="Edit {{ visit.customer_name }}"><i class="bi bi-pencil-square" aria-hidden="true"></i></button>{% else %}<span class="text-success ms-2" title="Billed entry is locked" aria-label="Billed entry is locked"><i class="bi bi-lock-fill" aria-hidden="true"></i></span>{% endif %}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 
-    {% if total_pages > 1 %}
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 p-3 border-top">
-        <small class="text-muted">Page {{ page }} of {{ total_pages }}</small>
-        <nav aria-label="Customer visit pages">
-            <ul class="pagination pagination-sm mb-0">
-                <li class="page-item {% if page <= 1 %}disabled{% endif %}"><a class="page-link" href="/cre/dashboard?page={{ page - 1 }}{% if filter_query %}&{{ filter_query }}{% endif %}" aria-label="Previous">&laquo;</a></li>
-                {% for page_number in page_numbers %}<li class="page-item {% if page_number == page %}active{% endif %}"><a class="page-link" href="/cre/dashboard?page={{ page_number }}{% if filter_query %}&{{ filter_query }}{% endif %}">{{ page_number }}</a></li>{% endfor %}
-                <li class="page-item {% if page >= total_pages %}disabled{% endif %}"><a class="page-link" href="/cre/dashboard?page={{ page + 1 }}{% if filter_query %}&{{ filter_query }}{% endif %}" aria-label="Next">&raquo;</a></li>
-            </ul>
-        </nav>
-    </div>
-    {% endif %}
+    {{ pager(dashboard_pagination, 'Dashboard') }}
     {% else %}
     <div class="text-center py-5 px-3">
         <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center mb-3" style="width:64px;height:64px"><i class="bi bi-people fs-3 text-secondary"></i></div>
         <h3 class="h6">No customer visits found</h3><p class="text-muted mb-3">Add a customer or change your search.</p>
-        {% if can_add_customer %}<button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#addCustomerModal"><i class="bi bi-person-plus me-1"></i>Add Walk-in Customer</button>{% else %}<a href="/cre/products" class="btn btn-danger">Add a Product First</a>{% endif %}
+        {% if can_add_customer %}<button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#addCustomerModal"><i class="bi bi-person-plus me-1"></i>Add Walk-in Customer</button>{% else %}<a href="/cre/products" class="btn btn-danger">Set up Products &amp; Categories</a>{% endif %}
     </div>
     {% endif %}
 </div>
 
 {% for row in visits %}
 {% set visit = row.visit %}
-<div class="modal fade" id="viewCustomerModal-{{ visit.id }}" tabindex="-1" aria-labelledby="viewCustomerTitle-{{ visit.id }}" aria-hidden="true">
+<div class="modal fade cre-visit-modal" id="viewCustomerModal-{{ visit.id }}" tabindex="-1" aria-labelledby="viewCustomerTitle-{{ visit.id }}" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
         <div class="modal-content border-0 shadow">
             <div class="modal-header"><div><div class="text-uppercase small fw-semibold text-danger">Customer Visit</div><h2 class="modal-title h5" id="viewCustomerTitle-{{ visit.id }}">{{ visit.customer_name }}</h2></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
             <div class="modal-body">
                 <div class="cre-customer-view-state">
                     <dl class="row cre-view-data mb-0">
+                        <div class="col-md-6"><dt>Visit No.</dt><dd class="cre-visit-reference">{{ visit.visit_number }}</dd></div>
                         <div class="col-md-6"><dt>Mobile Number</dt><dd><a href="tel:{{ visit.mobile_number }}">{{ visit.mobile_number }}</a></dd></div>
                         <div class="col-md-6"><dt>Product Type</dt><dd>{{ visit.product_type.name }}</dd></div>
+                        <div class="col-md-6"><dt>Category Type</dt><dd>{{ visit.category.name if visit.category else 'Not recorded' }}</dd></div>
                         <div class="col-md-6"><dt>Status</dt><dd>{{ visit_status(visit) }}</dd></div>
                         <div class="col-md-6"><dt>Store</dt><dd>{{ visit.store.store_name if visit.store else '-' }}</dd></div>
                         <div class="col-md-6"><dt>Handled By</dt><dd>{{ visit.handled_by.name if visit.handled_by else 'Not Assigned' }}</dd></div>
@@ -147,10 +209,11 @@
                         {% for custom_value in row.custom_values %}
                         <div class="col-md-6"><dt>{{ custom_columns[loop.index0].label }}</dt><dd>{{ custom_value.value or '-' }}</dd></div>
                         {% endfor %}
-                        <div class="col-md-6"><dt>Added</dt><dd>{{ visit.created_at.strftime('%d %b %Y, %I:%M %p') }}</dd></div>
+                        <div class="col-md-6"><dt>Added</dt><dd>{{ visit.created_at|ist }}</dd></div>
                         <div class="col-md-6"><dt>Recorded By</dt><dd>{% if visit.creator %}{{ visit.creator.display_name or visit.creator.username }}{% else %}-{% endif %}</dd></div>
                     </dl>
                 </div>
+                {% if visit.status != 'Billed' %}
                 <form id="editCustomerForm-{{ visit.id }}" class="cre-customer-edit-form d-none" method="post" action="/cre/customers/{{ visit.id }}/edit">
                     <div class="row g-3">
                         <div class="col-md-6"><label class="form-label mb-1" for="edit-name-{{ visit.id }}">Customer Name</label><input class="form-control" id="edit-name-{{ visit.id }}" name="customer_name" value="{{ visit.customer_name }}" maxlength="120" required></div>
@@ -158,6 +221,7 @@
                         <div class="col-md-6"><label class="form-label mb-1" for="edit-status-{{ visit.id }}">Status</label><select class="form-select cre-edit-status" id="edit-status-{{ visit.id }}" name="status" required>{% for option in visit_statuses %}<option value="{{ option }}" {% if visit_status(visit) == option %}selected{% endif %}>{{ option }}</option>{% endfor %}</select></div>
                         <div class="col-md-6"><label class="form-label mb-1" for="edit-store-{{ visit.id }}">Store</label><select class="form-select" id="edit-store-{{ visit.id }}" name="store_id" required><option value="">Choose store</option>{% for store in stores %}<option value="{{ store.id }}" {% if visit.store_id == store.id %}selected{% endif %}>{{ store.store_name }}</option>{% endfor %}</select></div>
                         <div class="col-md-6"><label class="form-label mb-1" for="edit-product-{{ visit.id }}">Product Type</label><select class="form-select" id="edit-product-{{ visit.id }}" name="product_type_id" required>{% for product_type in product_types %}<option value="{{ product_type.id }}" {% if visit.product_type_id == product_type.id %}selected{% endif %}>{{ product_type.name }}</option>{% endfor %}</select></div>
+                        <div class="col-md-6"><label class="form-label mb-1" for="edit-category-{{ visit.id }}">Category</label><select class="form-select" id="edit-category-{{ visit.id }}" name="category_id" required><option value="">Choose category</option>{% for category in categories %}<option value="{{ category.id }}" {% if visit.category_id == category.id %}selected{% endif %}>{{ category.name }}</option>{% endfor %}</select></div>
                         <div class="col-md-6"><label class="form-label mb-1" for="edit-sales-{{ visit.id }}">Sales Person</label><select class="form-select" id="edit-sales-{{ visit.id }}" name="handled_by_id" required><option value="0" {% if not visit.handled_by_id %}selected{% endif %}>Not Assigned</option>{% if visit.handled_by and visit.handled_by_id not in (sales_people|map(attribute='id')|list) %}<option value="{{ visit.handled_by_id }}" selected>{{ visit.handled_by.name }} (inactive)</option>{% endif %}{% for person in sales_people %}<option value="{{ person.id }}" {% if visit.handled_by_id == person.id %}selected{% endif %}>{{ person.name }}</option>{% endfor %}</select></div>
                         <div class="col-md-6"><label class="form-label mb-1" for="edit-manager-{{ visit.id }}">Assigned Manager</label><select class="form-select" id="edit-manager-{{ visit.id }}" name="assigned_manager_id" required><option value="0" {% if not visit.assigned_manager_id %}selected{% endif %}>Not Assigned</option>{% if visit.assigned_manager and visit.assigned_manager_id not in (managers|map(attribute='id')|list) %}<option value="{{ visit.assigned_manager_id }}" selected>{{ visit.assigned_manager.name }} (inactive)</option>{% endif %}{% for manager_item in managers %}<option value="{{ manager_item.id }}" {% if visit.assigned_manager_id == manager_item.id %}selected{% endif %}>{{ manager_item.name }}</option>{% endfor %}</select></div>
                         <div class="col-md-6 cre-edit-walkout-fields {% if visit.status != 'Walkout' %}d-none{% endif %}"><label class="form-label mb-1" for="edit-walkout-reason-{{ visit.id }}">Walkout Reason</label><select class="form-select cre-edit-walkout-reason" id="edit-walkout-reason-{{ visit.id }}" name="walkout_reason"><option value="">Choose reason</option>{% if visit.walkout_reason and visit.walkout_reason not in walkout_reasons %}<option value="{{ visit.walkout_reason }}" selected>{{ visit.walkout_reason }} (removed)</option>{% endif %}{% for reason in walkout_reasons %}<option value="{{ reason }}" {% if visit.walkout_reason == reason %}selected{% endif %}>{{ reason }}</option>{% endfor %}</select></div>
@@ -177,20 +241,21 @@
                         {% endfor %}
                     </div>
                 </form>
+                {% else %}<div class="alert alert-success mb-0 mt-3"><i class="bi bi-lock-fill me-2" aria-hidden="true"></i>Billed entry locked. Details and status cannot be changed.</div>{% endif %}
             </div>
-            <div class="modal-footer cre-customer-view-footer"><button class="btn btn-light" type="button" data-bs-dismiss="modal">Close</button><button class="btn btn-outline-danger" type="button" data-cre-edit-open><i class="bi bi-pencil me-1"></i>Edit details</button></div>
-            <div class="modal-footer cre-customer-edit-footer d-none"><button class="btn btn-light" type="button" data-cre-edit-cancel>Cancel</button><button class="btn btn-danger" type="submit" form="editCustomerForm-{{ visit.id }}"><i class="bi bi-check2 me-1"></i>Save changes</button></div>
+            <div class="modal-footer cre-customer-view-footer"><button class="btn btn-light" type="button" data-bs-dismiss="modal">Close</button>{% if visit.status != 'Billed' %}<button class="btn btn-outline-danger" type="button" data-cre-edit-open><i class="bi bi-pencil me-1"></i>Edit details</button>{% endif %}</div>
+            {% if visit.status != 'Billed' %}<div class="modal-footer cre-customer-edit-footer d-none"><button class="btn btn-light" type="button" data-cre-edit-cancel>Cancel</button><button class="btn btn-danger" type="submit" form="editCustomerForm-{{ visit.id }}"><i class="bi bi-check2 me-1"></i>Save changes</button></div>{% endif %}
         </div>
     </div>
 </div>
 {% endfor %}
 
 {% if can_add_customer %}
-<div class="modal fade cre-add-customer-modal" id="addCustomerModal" tabindex="-1" aria-labelledby="addCustomerTitle" aria-hidden="true">
+<div class="modal fade cre-add-customer-modal cre-visit-modal" id="addCustomerModal" tabindex="-1" aria-labelledby="addCustomerTitle" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
         <div class="modal-content border-0 shadow">
             <form method="post" action="/cre/customers">
-                <div class="modal-header"><div><h2 class="modal-title h5" id="addCustomerTitle">Add Walk-in Customer</h2><small class="text-muted">Record the customer and visit status.</small></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+                <div class="modal-header"><div><div class="text-uppercase small fw-semibold text-danger mb-1"><i class="bi bi-person-plus me-1" aria-hidden="true"></i>New customer visit</div><h2 class="modal-title h5" id="addCustomerTitle">Add Walk-in Customer</h2><small class="text-muted">A warm welcome starts with the right details.</small></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
                 <div class="modal-body">
                     <div class="row g-2">
                         <div class="col-md-6"><label class="form-label mb-1" for="customer-name">Customer Name</label><input class="form-control" id="customer-name" name="customer_name" maxlength="120" autocomplete="name" placeholder="Enter customer name" required autofocus></div>
@@ -199,10 +264,11 @@
                         <div class="col-md-6 cre-add-walkout-fields d-none"><label class="form-label mb-1" for="add-walkout-reason">Walkout Reason</label><select class="form-select" id="add-walkout-reason" name="walkout_reason" disabled><option value="">Choose reason</option>{% for reason in walkout_reasons %}<option value="{{ reason }}">{{ reason }}</option>{% endfor %}</select></div>
                         <div class="col-md-6 cre-add-walkout-fields d-none"><label class="form-label mb-1" for="add-competitor">Competitor Shop (optional)</label><select class="form-select" id="add-competitor" name="competitor_shop" disabled><option value="">Not recorded</option>{% for competitor in competitor_shops %}<option value="{{ competitor }}">{{ competitor }}</option>{% endfor %}</select></div>
                         <div class="col-12 cre-add-walkout-fields d-none"><label class="form-label mb-1" for="add-remark">Walkout Remark <span class="text-danger">*</span></label><textarea class="form-control" id="add-remark" name="remark" rows="2" maxlength="1000" disabled></textarea></div>
-                        <div class="col-md-3"><label class="form-label mb-1" for="store-id">Store</label><select class="form-select" id="store-id" name="store_id" required><option value="" {% if stores|length != 1 %}selected{% endif %}>Choose store</option>{% for store in stores %}<option value="{{ store.id }}" {% if stores|length == 1 %}selected{% endif %}>{{ store.store_name }}</option>{% endfor %}</select></div>
-                        <div class="col-md-3"><label class="form-label mb-1" for="product-type">Product Type</label><select class="form-select" id="product-type" name="product_type_id" required><option value="" {% if product_types|length != 1 %}selected{% endif %}>Choose product</option>{% for product_type in product_types %}<option value="{{ product_type.id }}" {% if product_types|length == 1 %}selected{% endif %}>{{ product_type.name }}</option>{% endfor %}</select></div>
-                        <div class="col-md-4"><label class="form-label mb-1" for="handled-by">Sales Person</label><select class="form-select" id="handled-by" name="handled_by_id" required><option value="0" {% if sales_people|length != 1 %}selected{% endif %}>Not Assigned</option>{% for person in sales_people %}<option value="{{ person.id }}" {% if sales_people|length == 1 %}selected{% endif %}>{{ person.name }}</option>{% endfor %}</select></div>
-                        <div class="col-md-4"><label class="form-label mb-1" for="assigned-manager">Manager</label><select class="form-select" id="assigned-manager" name="assigned_manager_id" required><option value="0" {% if managers|length != 1 %}selected{% endif %}>Not Assigned</option>{% for manager_item in managers %}<option value="{{ manager_item.id }}" {% if managers|length == 1 %}selected{% endif %}>{{ manager_item.name }}</option>{% endfor %}</select></div>
+                        <div class="col-12"><label class="form-label mb-1" for="store-id">Store</label><select class="form-select" id="store-id" name="store_id" required>{% set default_store_id = user.store_id if user.store_id in (stores|map(attribute="id")|list) else (stores[0].id if stores|length == 1 else none) %}<option value="" {% if not default_store_id %}selected{% endif %}>Choose store</option>{% for store in stores %}<option value="{{ store.id }}" {% if store.id == default_store_id %}selected{% endif %}>{{ store.store_name }}</option>{% endfor %}</select></div>
+                        <div class="col-12"><label class="form-label mb-1" for="product-type">Product Type</label><select class="form-select" id="product-type" name="product_type_id" required><option value="" {% if product_types|length != 1 %}selected{% endif %}>Choose product</option>{% for product_type in product_types %}<option value="{{ product_type.id }}" {% if product_types|length == 1 %}selected{% endif %}>{{ product_type.name }}</option>{% endfor %}</select></div>
+                        <div class="col-12"><label class="form-label mb-1" for="category-id">Category</label><select class="form-select" id="category-id" name="category_id" required><option value="">Choose category</option>{% for category in categories %}<option value="{{ category.id }}">{{ category.name }}</option>{% endfor %}</select></div>
+                        <div class="col-md-6"><label class="form-label mb-1" for="handled-by">Sales Person</label><select class="form-select" id="handled-by" name="handled_by_id" required><option value="0" {% if sales_people|length != 1 %}selected{% endif %}>Not Assigned</option>{% for person in sales_people %}<option value="{{ person.id }}" {% if sales_people|length == 1 %}selected{% endif %}>{{ person.name }}</option>{% endfor %}</select></div>
+                        <div class="col-md-6"><label class="form-label mb-1" for="assigned-manager">Manager</label><select class="form-select" id="assigned-manager" name="assigned_manager_id" required><option value="0" {% if managers|length != 1 %}selected{% endif %}>Not Assigned</option>{% for manager_item in managers %}<option value="{{ manager_item.id }}" {% if managers|length == 1 %}selected{% endif %}>{{ manager_item.name }}</option>{% endfor %}</select></div>
                     </div>
                     {% if form_field_definitions %}
                     <div class="row g-2 mt-2">
@@ -231,6 +297,35 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    const summary = document.getElementById('creDailySummary');
+    let summaryTimer;
+    let summaryLoading = false;
+    function scheduleSummary() {
+        clearTimeout(summaryTimer);
+        summaryTimer = setTimeout(refreshSummary, Math.max(1000, Date.parse(summary.dataset.resetsAt) - Date.now() + 250));
+    }
+    async function refreshSummary() {
+        if (summaryLoading) return;
+        summaryLoading = true;
+        try {
+            const response = await fetch('/cre/dashboard/summary', {cache: 'no-store', headers: {'Accept': 'application/json'}});
+            if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) throw new Error('Summary unavailable');
+            const data = await response.json();
+            summary.querySelectorAll('[data-daily-count]').forEach(function (element) {
+                element.textContent = data[element.dataset.dailyCount];
+            });
+            document.getElementById('creSummaryDate').textContent = data.summary_date;
+            summary.dataset.resetsAt = data.resets_at;
+            scheduleSummary();
+        } catch (_) {
+            clearTimeout(summaryTimer);
+            summaryTimer = setTimeout(refreshSummary, 10000);
+        } finally { summaryLoading = false; }
+    }
+    scheduleSummary();
+    document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) refreshSummary();
+    });
     const addCustomerModal = document.getElementById('addCustomerModal');
     if (addCustomerModal) {
         addCustomerModal.addEventListener('shown.bs.modal', function () {
@@ -257,6 +352,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.modal[id^="viewCustomerModal-"]').forEach(function (modal) {
         const viewState = modal.querySelector('.cre-customer-view-state');
         const editForm = modal.querySelector('.cre-customer-edit-form');
+        if (!editForm) return;
         const viewFooter = modal.querySelector('.cre-customer-view-footer');
         const editFooter = modal.querySelector('.cre-customer-edit-footer');
         const status = editForm.querySelector('.cre-edit-status');
@@ -279,6 +375,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         modal.querySelector('[data-cre-edit-open]').addEventListener('click', function () { showEdit(true); });
         modal.querySelector('[data-cre-edit-cancel]').addEventListener('click', function () { showEdit(false); });
+        modal.addEventListener('show.bs.modal', function (event) {
+            showEdit(event.relatedTarget?.dataset.creAction === 'edit');
+        });
         status.addEventListener('change', syncEditFields);
         syncEditFields();
     });

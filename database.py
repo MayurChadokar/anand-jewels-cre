@@ -19,5 +19,11 @@ def get_db():
 def init_db():
     import models
     Base.metadata.create_all(engine)
+    from visit_categories import migrate_003_categories_and_billed_lock
+    migrate_003_categories_and_billed_lock(engine)
     from visit_options import migrate_001_visit_options
     migrate_001_visit_options(engine)
+    from walkout_followups import migrate_002_walkout_followups
+    migrate_002_walkout_followups(engine)
+    from query_indexes import migrate_004_query_indexes
+    migrate_004_query_indexes(engine)

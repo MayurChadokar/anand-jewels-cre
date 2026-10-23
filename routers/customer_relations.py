@@ -2,17 +2,19 @@ import json
 import math
 import re
 from collections import Counter, defaultdict
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from io import BytesIO
 from typing import Optional
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlsplit, parse_qsl
 
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, or_
-from sqlalchemy.orm import Session, joinedload
+from starlette.datastructures import FormData
+from sqlalchemy import case, func, or_
+from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy.exc import IntegrityError
 from visit_options import OPTION_KINDS, option_names, valid_option
 
@@ -26,13 +28,21 @@ from auth import (
 )
 from database import get_db
 from settings import TEMPLATE_DIR
-from models import CreVisitOption, AdminUser, CreStaffMember, CustomerFormField, CustomerProductType, CustomerVisit, Store, UserRole
+from models import CreVisitOption, CreWalkoutFollowup, CustomerProductCategory, AdminUser, CreStaffMember, CustomerFormField, CustomerProductType, CustomerVisit, Store, UserRole
+from walkout_followups import remember_walkout
+from datetime_utils import INDIA_TIME, format_ist
 from auth import get_current_user_web
+
+
+async def _read_form(request: Request):
+    # Parse the request body on the event loop before synchronous business work.
+    return await request.form()
 
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 templates.env.globals["visit_status"] = lambda visit: display_visit_status(visit)
+templates.env.filters['ist'] = format_ist
 
 ACTIVITY_TYPES = (
     "New Jewellery",
@@ -91,10 +101,78 @@ CRE_PANEL_ROLES = {
     UserRole.SUPER_ADMIN.value,
 }
 PAGE_SIZE = 20
+PAGE_SIZES = (10, 20, 50, 100)
+
+
+def _pagination_meta(total, page, request, page_key='page', tab=None, per_page=PAGE_SIZE):
+    pages = max(1, math.ceil(total / per_page))
+    page = min(page, pages)
+    offset = (page - 1) * per_page
+    first = min(max(1, page - 2), max(1, pages - 4))
+    visible = sorted({1, pages, *range(first, min(pages, first + 4) + 1)})
+    numbers = []
+    for number in visible:
+        if numbers and number - numbers[-1] > 1:
+            numbers.append(None)
+        numbers.append(number)
+    params = dict(request.query_params)
+    params.pop('message', None)
+    params.pop('error', None)
+    if tab:
+        params['tab'] = tab
+    params['per_page'] = per_page
+    size_params = {key: value for key, value in params.items()
+                   if key not in ('per_page', 'page', 'walkin_page', 'walkout_page', 'competitor_page', 'manager_page', 'sales_page')}
+    def url(number):
+        return request.url.path + '?' + urlencode({**params, page_key: number})
+    return {'page': page, 'pages': pages, 'total': total, 'offset': offset,
+            'start': offset + 1 if total else 0, 'end': min(offset + per_page, total),
+            'per_page': per_page, 'size_options': PAGE_SIZES,
+            'size_params': size_params, 'size_action': request.url.path, 'size_id': page_key,
+            'numbers': numbers, 'urls': {number: url(number) for number in visible},
+            'previous': url(max(1, page - 1)), 'next': url(min(pages, page + 1))}
+
+
+def dashboard_day_summary(db, now=None):
+    # SQLite CURRENT_TIMESTAMP stores visit timestamps as naive UTC.
+    today = (now or datetime.now(INDIA_TIME)).astimezone(INDIA_TIME).date()
+    start = datetime.combine(today, time.min, tzinfo=INDIA_TIME)
+    end = start + timedelta(days=1)
+    daily = db.query(CustomerVisit).filter(
+        CustomerVisit.created_at >= start.astimezone(timezone.utc).replace(tzinfo=None),
+        CustomerVisit.created_at < end.astimezone(timezone.utc).replace(tzinfo=None),
+    )
+    counts = daily.with_entities(
+        func.count(CustomerVisit.id),
+        func.coalesce(func.sum(case((
+            (CustomerVisit.activity_type == 'New Jewellery') &
+            or_(CustomerVisit.status == 'Draft', CustomerVisit.status.is_(None)), 1), else_=0)), 0),
+        func.coalesce(func.sum(case((
+            (CustomerVisit.activity_type == 'New Jewellery') & (CustomerVisit.status == 'Billed'), 1), else_=0)), 0),
+        func.coalesce(func.sum(case((
+            (CustomerVisit.activity_type == 'New Jewellery') & (CustomerVisit.status == 'Walkout'), 1), else_=0)), 0),
+    ).one()
+    return {
+        'total_visits': counts[0],
+        'draft_count': counts[1],
+        'billed_count': counts[2],
+        'walkout_count': counts[3],
+        'summary_date': today.strftime('%d %b %Y'),
+        'resets_at': end.isoformat(),
+    }
+
+
+@router.get('/cre/dashboard/summary')
+def cre_dashboard_summary(
+    db: Session = Depends(get_db),
+    current_user: AdminUser = Depends(require_customer_relations_access),
+):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(dashboard_day_summary(db), headers={'Cache-Control': 'no-store'})
 
 
 @router.get("/admin/customer-relations", include_in_schema=False)
-async def redirect_legacy_cre_url(request: Request):
+def redirect_legacy_cre_url(request: Request):
     """Move old bookmarks to the dedicated CRE URL while preserving filters."""
     allowed = {
         key: request.query_params[key]
@@ -128,7 +206,7 @@ def _dashboard_filter_query(q: str, activity: str, sales_person: int, manager: i
 
 def _report_date_range(date_from: Optional[date], date_to: Optional[date]):
     """Return an inclusive report range, defaulting to the current month."""
-    today = date.today()
+    today = datetime.now(INDIA_TIME).date()
     start = date_from or today.replace(day=1)
     end = date_to or today
     if start > end:
@@ -150,9 +228,13 @@ def _report_visits_query(
         joinedload(CustomerVisit.store),
         joinedload(CustomerVisit.handled_by),
         joinedload(CustomerVisit.assigned_manager),
+        joinedload(CustomerVisit.product_type),
+        joinedload(CustomerVisit.category),
+        joinedload(CustomerVisit.walkout_record),
+        selectinload(CustomerVisit.followups).joinedload(CreWalkoutFollowup.author),
     ).filter(
-        CustomerVisit.created_at >= datetime.combine(start, time.min),
-        CustomerVisit.created_at < datetime.combine(end + timedelta(days=1), time.min),
+        CustomerVisit.created_at >= datetime.combine(start, time.min, tzinfo=INDIA_TIME).astimezone(timezone.utc).replace(tzinfo=None),
+        CustomerVisit.created_at < datetime.combine(end + timedelta(days=1), time.min, tzinfo=INDIA_TIME).astimezone(timezone.utc).replace(tzinfo=None),
     )
     if store_id:
         query = query.filter(CustomerVisit.store_id == store_id)
@@ -161,9 +243,11 @@ def _report_visits_query(
     if sales_person_id:
         query = query.filter(CustomerVisit.handled_by_id == sales_person_id)
     if walkout_reason:
-        query = query.filter(CustomerVisit.walkout_reason == walkout_reason)
+        query = query.filter(or_(CustomerVisit.walkout_reason == walkout_reason,
+                                 CustomerVisit.walkout_record.has(reason=walkout_reason)))
     if competitor_shop:
-        query = query.filter(CustomerVisit.competitor_shop == competitor_shop)
+        query = query.filter(or_(CustomerVisit.competitor_shop == competitor_shop,
+                                 CustomerVisit.walkout_record.has(competitor=competitor_shop)))
     return query
 
 
@@ -239,28 +323,38 @@ def _build_report_data(
     walkin_rows = [
         {
             "date": visit.created_at,
+            "visit_number": visit.visit_number,
             "customer_name": visit.customer_name,
             "mobile_number": visit.mobile_number,
             "store_name": visit.store.store_name if visit.store else "Not recorded",
             "activity_type": visit.activity_type,
+            "category": visit.category.name if visit.category else "Not recorded",
             "status": display_visit_status(visit),
             "sales_person": visit.handled_by.name if visit.handled_by else "Not Assigned",
             "manager": visit.assigned_manager.name if visit.assigned_manager else "Not Assigned",
         }
-        for visit in sorted(visits, key=lambda visit: visit.created_at, reverse=True)
+        for visit in sorted(visits, key=lambda visit: (visit.created_at, visit.id), reverse=True)
     ]
     walkout_rows = [
         {
+            "id": visit.id,
             "date": visit.created_at,
+            "visit_number": visit.visit_number,
             "customer_name": visit.customer_name,
             "mobile_number": visit.mobile_number,
             "store_name": visit.store.store_name if visit.store else "Not recorded",
-            "reason": visit.walkout_reason or "Not recorded",
-            "competitor": visit.competitor_shop or "Not recorded",
+            "reason": (visit.walkout_reason if visit.status == 'Walkout' else visit.walkout_record.reason if visit.walkout_record else visit.walkout_reason) or "Not recorded",
+            "competitor": (visit.competitor_shop if visit.status == 'Walkout' else visit.walkout_record.competitor if visit.walkout_record else visit.competitor_shop) or "Not recorded",
             "manager": visit.assigned_manager.name if visit.assigned_manager else "Not Assigned",
-            "remark": visit.remark or "-",
+            "remark": (visit.walkout_record.remark if visit.walkout_record else visit.remark) or "-",
+            "status": display_visit_status(visit),
+            "product": visit.product_type.name,
+            "category": visit.category.name if visit.category else "Not recorded",
+            "sales_person": visit.handled_by.name if visit.handled_by else "Not Assigned",
+            "followups": {item.slot: item for item in visit.followups},
         }
-        for visit in sorted(walkouts, key=lambda visit: visit.created_at, reverse=True)
+        for visit in sorted(visits, key=lambda visit: (visit.created_at, visit.id), reverse=True)
+        if visit.walkout_record or visit.status == 'Walkout'
     ]
     total = len(visits)
     return {
@@ -280,6 +374,13 @@ def _build_report_data(
         "competitor_rows": competitor_rows,
         "walkin_rows": walkin_rows,
         "walkout_rows": walkout_rows,
+        "recovered_count": sum(row['status'] == 'Billed' for row in walkout_rows),
+        "register_metrics": {
+            "total": len(walkout_rows),
+            "open": sum(row['status'] == 'Walkout' for row in walkout_rows),
+            "recovered": sum(row['status'] == 'Billed' for row in walkout_rows),
+            "pending_followups": sum(row['status'] != 'Billed' and len(row['followups']) < 3 for row in walkout_rows),
+        },
     }
 
 
@@ -308,23 +409,23 @@ def _render_cre_page(template_name, request, user, **context):
 
 @router.get("/cre", include_in_schema=False)
 @router.get("/cre/", include_in_schema=False)
-async def cre_root(request: Request, db: Session = Depends(get_db)):
-    user = await get_current_user_web(request, db)
+def cre_root(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user_web(request, db)
     if user and user.role in CRE_PANEL_ROLES:
         return RedirectResponse("/cre/dashboard", status_code=302)
     return RedirectResponse("/cre/login", status_code=302)
 
 
 @router.get("/cre/login", response_class=HTMLResponse)
-async def cre_login_page(request: Request, db: Session = Depends(get_db)):
-    user = await get_current_user_web(request, db)
+def cre_login_page(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user_web(request, db)
     if user and user.role in CRE_PANEL_ROLES:
         return RedirectResponse("/cre/dashboard", status_code=302)
     return templates.TemplateResponse("cre_login.html", {"request": request, "error": ""})
 
 
 @router.post("/cre/login")
-async def cre_login(
+def cre_login(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
@@ -344,24 +445,26 @@ async def cre_login(
 
 
 @router.get("/cre/logout")
-async def cre_logout(request: Request):
+def cre_logout(request: Request):
     logout_user(request)
     return RedirectResponse("/cre/login", status_code=303)
 
 
 @router.get("/cre/dashboard", response_class=HTMLResponse)
-async def cre_dashboard(
+def cre_dashboard(
     request: Request,
     q: str = Query(default="", max_length=120),
     activity: str = Query(default="", max_length=40),
     sales_person: int = Query(default=0, ge=0),
     manager: int = Query(default=0, ge=0),
     page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=PAGE_SIZE, ge=1, le=100),
     message: str = Query(default="", max_length=120),
     error: str = Query(default="", max_length=160),
     db: Session = Depends(get_db),
     current_user: AdminUser = Depends(require_customer_relations_access),
 ):
+    per_page = per_page if per_page in PAGE_SIZES else PAGE_SIZE
     product_types = db.query(CustomerProductType).order_by(
         func.lower(CustomerProductType.name)
     ).all()
@@ -383,21 +486,31 @@ async def cre_dashboard(
         CreStaffMember.is_active == 1,
     ).order_by(func.lower(CreStaffMember.name)).all()
 
+    categories = db.query(CustomerProductCategory).order_by(CustomerProductCategory.name).all()
     base_query = db.query(CustomerVisit)
     visits_query = base_query.options(
+        joinedload(CustomerVisit.store),
         joinedload(CustomerVisit.product_type),
+        joinedload(CustomerVisit.category),
         joinedload(CustomerVisit.handled_by),
         joinedload(CustomerVisit.assigned_manager),
     )
     if q.strip():
         search = f"%{q.strip()}%"
-        visits_query = visits_query.join(CustomerVisit.product_type).filter(
-            or_(
-                CustomerVisit.customer_name.ilike(search),
-                CustomerVisit.mobile_number.ilike(search),
-                CustomerProductType.name.ilike(search),
+        number_match = re.fullmatch(r'CRE-(\d{1,19})', q.strip(), re.IGNORECASE)
+        visit_id = int(number_match.group(1)) if number_match else 0
+        if visit_id > 9223372036854775807:
+            visit_id = 0
+        if number_match:
+            visits_query = visits_query.filter(CustomerVisit.id == visit_id)
+        else:
+            visits_query = visits_query.join(CustomerVisit.product_type).filter(
+                or_(
+                    CustomerVisit.customer_name.ilike(search),
+                    CustomerVisit.mobile_number.ilike(search),
+                    CustomerProductType.name.ilike(search),
+                )
             )
-        )
     if activity in ("Draft", "Billed", "Walkout"):
         visits_query = visits_query.filter(CustomerVisit.activity_type == "New Jewellery",
                                            CustomerVisit.status == activity)
@@ -409,14 +522,14 @@ async def cre_dashboard(
         visits_query = visits_query.filter(CustomerVisit.assigned_manager_id == manager)
 
     total_filtered = visits_query.count()
-    total_pages = max(1, math.ceil(total_filtered / PAGE_SIZE))
+    total_pages = max(1, math.ceil(total_filtered / per_page))
     page = min(page, total_pages)
-    visits = visits_query.order_by(CustomerVisit.created_at.desc()).offset(
-        (page - 1) * PAGE_SIZE
-    ).limit(PAGE_SIZE).all()
+    visits = visits_query.order_by(CustomerVisit.created_at.desc(), CustomerVisit.id.desc()).offset(
+        (page - 1) * per_page
+    ).limit(per_page).all()
 
     visit_rows = []
-    serial_number = (page - 1) * PAGE_SIZE + 1
+    serial_number = (page - 1) * per_page + 1
     for row_index, visit in enumerate(visits):
         try:
             values = json.loads(visit.custom_fields or "{}")
@@ -432,19 +545,7 @@ async def cre_dashboard(
             "serial_number": serial_number + row_index,
         })
 
-    scope_count = base_query.count()
-    draft_count = base_query.filter(
-        CustomerVisit.activity_type == "New Jewellery",
-        CustomerVisit.status == "Draft",
-    ).count()
-    billed_count = base_query.filter(
-        CustomerVisit.activity_type == "New Jewellery",
-        CustomerVisit.status == "Billed",
-    ).count()
-    walkout_count = base_query.filter(
-        CustomerVisit.activity_type == "New Jewellery",
-        CustomerVisit.status == "Walkout",
-    ).count()
+    daily_summary = dashboard_day_summary(db)
     sales_people_count = len(sales_people)
 
     return _render_cre_page(
@@ -452,6 +553,7 @@ async def cre_dashboard(
         request,
         current_user,
         product_types=product_types,
+        categories=categories,
         stores=stores,
         form_fields=form_fields,
         form_field_definitions=form_field_definitions,
@@ -471,22 +573,22 @@ async def cre_dashboard(
         page=page,
         total_pages=total_pages,
         page_numbers=range(max(1, page - 2), min(total_pages, page + 2) + 1),
+        dashboard_pagination=_pagination_meta(total_filtered, page, request, per_page=per_page),
+        per_page=per_page,
         total_filtered=total_filtered,
         filter_query=_dashboard_filter_query(q, activity, sales_person, manager),
-        total_visits=scope_count,
-        draft_count=draft_count,
-        billed_count=billed_count,
-        walkout_count=walkout_count,
+        **daily_summary,
         sales_people_count=sales_people_count,
         can_manage=True,
-        can_add_customer=bool(product_types and stores),
+        can_add_customer=bool(product_types and stores and categories),
         message=message,
         error=error,
     )
 
 
+@router.get('/cre/walkout-register', response_class=HTMLResponse)
 @router.get("/cre/reports", response_class=HTMLResponse)
-async def cre_reports(
+def cre_reports(
     request: Request,
     date_from: Optional[date] = Query(default=None),
     date_to: Optional[date] = Query(default=None),
@@ -496,18 +598,42 @@ async def cre_reports(
     walkout_reason: str = Query(default="", max_length=80),
     competitor_shop: str = Query(default="", max_length=100),
     tab: str = Query(default="overview", max_length=20),
+    walkin_page: int = Query(default=1, ge=1),
+    walkout_page: int = Query(default=1, ge=1),
+    competitor_page: int = Query(default=1, ge=1),
+    manager_page: int = Query(default=1, ge=1),
+    sales_page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=PAGE_SIZE, ge=1, le=100),
+    message: str = Query(default="", max_length=120),
+    error: str = Query(default="", max_length=160),
     db: Session = Depends(get_db),
     current_user: AdminUser = Depends(require_customer_relations_access),
 ):
-    start, end = _report_date_range(date_from, date_to)
-    active_tab = tab if tab in REPORT_TABS else "overview"
+    per_page = per_page if per_page in PAGE_SIZES else PAGE_SIZE
+    standalone = request.url.path == '/cre/walkout-register'
+    start, end = _report_date_range(date_from or (date(1900, 1, 1) if standalone else None), date_to)
+    active_tab = 'walkout' if standalone else tab if tab in REPORT_TABS else "overview"
+    report = _build_report_data(db, start, end, store_id, manager_id, sales_person_id, walkout_reason, competitor_shop)
+    report['competitor_visits'] = [row for row in report['walkout_rows'] if row['competitor'] != 'Not recorded']
+    report['manager_page_rows'] = report['manager_rows']
+    report['sales_page_rows'] = report['sales_rows']
+    report_pages = {}
+    for key, selected, rows_key in (
+        ('walkin', walkin_page, 'walkin_rows'), ('walkout', walkout_page, 'walkout_rows'),
+        ('competitor', competitor_page, 'competitor_visits'),
+        ('manager', manager_page, 'manager_page_rows'), ('sales', sales_page, 'sales_page_rows'),
+    ):
+        rows = report[rows_key]
+        paging = _pagination_meta(len(rows), selected, request, key + '_page', key, per_page=per_page)
+        report_pages[key] = paging
+        report[rows_key] = rows[paging['offset']:paging['offset'] + per_page]
     return _render_cre_page(
         "cre_reports.html",
         request,
         current_user,
-        report=_build_report_data(
-            db, start, end, store_id, manager_id, sales_person_id, walkout_reason, competitor_shop
-        ),
+        report=report,
+        report_pages=report_pages,
+        per_page=per_page,
         stores=db.query(Store).order_by(func.lower(Store.store_name)).all(),
         managers=db.query(CreStaffMember).filter(
             CreStaffMember.staff_type == "manager",
@@ -525,13 +651,63 @@ async def cre_reports(
         selected_walkout_reason=walkout_reason,
         selected_competitor_shop=competitor_shop,
         active_tab=active_tab,
+        standalone_walkout=standalone,
+        today_iso=datetime.now(INDIA_TIME).date().isoformat(),
+        message=message,
+        error=error,
+        report_return_to=('/cre/walkout-register?' if standalone else '/cre/reports?') + urlencode({
+            'tab': 'walkout', 'date_from': start.isoformat(), 'date_to': end.isoformat(),
+            'store_id': store_id, 'manager_id': manager_id, 'sales_person_id': sales_person_id,
+            'walkout_reason': walkout_reason, 'competitor_shop': competitor_shop,
+            'walkout_page': report_pages['walkout']['page'],
+            'per_page': per_page,
+        }),
         walkout_reasons=option_names(db, "reason", include_history=True),
         competitor_shops=option_names(db, "competitor", include_history=True),
+        editable_walkout_reasons=option_names(db, 'reason'),
+        editable_competitor_shops=option_names(db, 'competitor'),
     )
 
 
+def _walkout_excel_response(rows):
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = 'Walkout Register'
+    sheet.append(['Visit Number', 'Name', 'Mobile', 'Product Type', 'Category Type',
+                  'Sales Person', 'Meet by Manager', 'Walkout Reason', 'Status',
+                  'Follow up 1', 'Follow up 2', 'Follow up 3'])
+    for row in rows:
+        values = [row['visit_number'], row['customer_name'], row['mobile_number'],
+                  row['product'], row['category'], row['sales_person'], row['manager'],
+                  row['reason'], row['status'],
+                  *[row['followups'][slot].note if slot in row['followups'] else '' for slot in (1, 2, 3)]]
+        sheet.append(values)
+        for cell in sheet[sheet.max_row]:
+            # All exported values are text, including phone numbers and notes.
+            cell.data_type = 's'
+            cell.alignment = Alignment(vertical='top', wrap_text=True)
+            cell.fill = PatternFill('solid', fgColor='E8F5EC' if row['status'] == 'Billed' else 'FFF4F3')
+    for cell in sheet[1]:
+        cell.font = Font(bold=True, color='FFFFFF', size=11)
+        cell.fill = PatternFill('solid', fgColor='AD2635')
+        cell.alignment = Alignment(vertical='center', wrap_text=True)
+    sheet.row_dimensions[1].height = 32
+    for index, width in enumerate((19, 26, 22, 22, 22, 25, 25, 28, 18, 48, 48, 48), 1):
+        sheet.column_dimensions[sheet.cell(1, index).column_letter].width = width
+    sheet.freeze_panes = 'A2'
+    sheet.auto_filter.ref = sheet.dimensions
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    return StreamingResponse(output,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': 'attachment; filename="cre-walkout-register.xlsx"'})
+
+
+@router.get('/cre/walkout-register/export/excel')
 @router.get("/cre/reports/export/excel")
-async def export_cre_report_excel(
+def export_cre_report_excel(
+    request: Request,
     date_from: Optional[date] = Query(default=None),
     date_to: Optional[date] = Query(default=None),
     store_id: int = Query(default=0, ge=0),
@@ -542,10 +718,13 @@ async def export_cre_report_excel(
     db: Session = Depends(get_db),
     current_user: AdminUser = Depends(require_customer_relations_access),
 ):
-    start, end = _report_date_range(date_from, date_to)
+    standalone = request.url.path == '/cre/walkout-register/export/excel'
+    start, end = _report_date_range(date_from or (date(1900, 1, 1) if standalone else None), date_to)
     report = _build_report_data(
         db, start, end, store_id, manager_id, sales_person_id, walkout_reason, competitor_shop
     )
+    if standalone:
+        return _walkout_excel_response(report['walkout_rows'])
     workbook = Workbook()
     summary_sheet = workbook.active
     summary_sheet.title = "Walk-in Summary"
@@ -568,7 +747,7 @@ async def export_cre_report_excel(
         sheet = workbook.create_sheet(title)
         sheet.append(headers)
         for row in rows:
-            sheet.append(row)
+            sheet.append(["'" + value if isinstance(value, str) and value.startswith(('=', '+', '-', '@')) else value for value in row])
         for cell in sheet[1]:
             cell.font = cell.font.copy(bold=True)
         for column in sheet.columns:
@@ -593,6 +772,14 @@ async def export_cre_report_excel(
         cell.number_format = "0.00%"
     add_sheet("Walkout reasons", ["Reason", "Walkouts"], [[row["name"], row["count"]] for row in report["reason_rows"]])
     add_sheet("Competitors", ["Competitor", "Walkouts"], [[row["name"], row["count"]] for row in report["competitor_rows"]])
+    add_sheet('Walkout register',
+        ['Visit date (IST)', 'Customer', 'Mobile', 'Store', 'Product', 'Sales person', 'Manager',
+         'Reason', 'Competitor', 'Remark', 'Follow-up 1', 'Follow-up 2', 'Follow-up 3', 'Final status', 'Category', 'Visit No.'],
+        [[format_ist(row['date']), row['customer_name'], row['mobile_number'],
+          row['store_name'], row['product'], row['sales_person'], row['manager'], row['reason'],
+          row['competitor'], row['remark'],
+          *[row['followups'][slot].note if slot in row['followups'] else '' for slot in (1, 2, 3)],
+          row['status'], row['category'], row['visit_number']] for row in report['walkout_rows']])
 
     output = BytesIO()
     workbook.save(output)
@@ -606,12 +793,12 @@ async def export_cre_report_excel(
 
 
 @router.post("/cre/customers")
-async def add_customer_visit(
+def add_customer_visit(
     request: Request,
     db: Session = Depends(get_db),
     current_user: AdminUser = Depends(require_customer_relations_access),
+    form: FormData = Depends(_read_form),
 ):
-    form = await request.form()
     customer_name = " ".join(str(form.get("customer_name", "")).split())
     mobile_number = str(form.get("mobile_number", "")).strip()
     product_type_id = form.get("product_type_id", "")
@@ -641,6 +828,13 @@ async def add_customer_visit(
     ).first()
     if not product_type:
         return RedirectResponse(_panel_url(error="Choose a product type, or add one first."), status_code=303)
+
+    try:
+        category = db.get(CustomerProductCategory, int(form.get('category_id', '')))
+    except (TypeError, ValueError):
+        category = None
+    if not category:
+        return RedirectResponse(_panel_url(error='Choose a valid category. Add categories from Products first.'), status_code=303)
 
     try:
         handled_by_id = int(handled_by_id) if handled_by_id else None
@@ -694,6 +888,7 @@ async def add_customer_visit(
         customer_name=customer_name[:120],
         mobile_number=mobile_number[:24],
         product_type_id=product_type.id,
+        category_id=category.id,
         handled_by_id=handled_by.id if handled_by else None,
         assigned_manager_id=assigned_manager.id if assigned_manager else None,
         store_id=store.id,
@@ -706,12 +901,13 @@ async def add_customer_visit(
         created_by=current_user.id,
     )
     db.add(visit)
+    remember_walkout(db, visit)
     db.commit()
-    return RedirectResponse(_panel_url(message="Customer visit added."), status_code=303)
+    return RedirectResponse(_panel_url(message=f"Visit {visit.visit_number} saved successfully."), status_code=303)
 
 
 @router.post("/cre/customers/{visit_id}/status")
-async def update_new_jewellery_status(
+def update_new_jewellery_status(
     visit_id: int,
     status: str = Form(..., max_length=40),
     remark: str = Form(default="", max_length=1000),
@@ -723,6 +919,8 @@ async def update_new_jewellery_status(
     visit = db.query(CustomerVisit).filter(CustomerVisit.id == visit_id).first()
     if not visit:
         return RedirectResponse(_panel_url(error="Customer visit was not found."), status_code=303)
+    if visit.status == 'Billed':
+        return RedirectResponse(_panel_url(error='Billed entries are locked. Details and status cannot be changed.'), status_code=303)
     try:
         activity_type, stored_status = resolve_visit_status({"status": status})
         remark, walkout_reason, competitor_shop = walkout_values(db, {
@@ -730,27 +928,32 @@ async def update_new_jewellery_status(
             "competitor_shop": competitor_shop}, stored_status, visit)
     except ValueError as error:
         return RedirectResponse(_panel_url(error=str(error)), status_code=303)
+    remember_walkout(db, visit)
     visit.activity_type = activity_type
     visit.status = stored_status
     visit.remark = remark
     visit.walkout_reason = walkout_reason
     visit.competitor_shop = competitor_shop
-    db.commit()
+    remember_walkout(db, visit)
+    if not _commit_visit_change(db):
+        return RedirectResponse(_panel_url(error='Billed entries are locked. Refresh the page.'), status_code=303)
     return RedirectResponse(_panel_url(message=f"Status updated to {status}."), status_code=303)
 
 
 @router.post("/cre/customers/{visit_id}/edit")
-async def edit_customer_visit(
+def edit_customer_visit(
     visit_id: int,
     request: Request,
     db: Session = Depends(get_db),
     current_user: AdminUser = Depends(require_customer_relations_access),
+    form: FormData = Depends(_read_form),
 ):
     visit = db.query(CustomerVisit).filter(CustomerVisit.id == visit_id).first()
     if not visit:
         return RedirectResponse(_panel_url(error="Customer visit was not found."), status_code=303)
 
-    form = await request.form()
+    if visit.status == 'Billed':
+        return RedirectResponse(_panel_url(error='Billed entries are locked. Details and status cannot be changed.'), status_code=303)
     customer_name = " ".join(str(form.get("customer_name", "")).split())
     mobile_number = str(form.get("mobile_number", "")).strip()
     digits = re.sub(r"\D", "", mobile_number)
@@ -793,6 +996,13 @@ async def edit_customer_visit(
     if len(remark) > 1000:
         return RedirectResponse(_panel_url(error="Remark must be 1000 characters or fewer."), status_code=303)
     try:
+        category = db.get(CustomerProductCategory, int(form.get('category_id', '')))
+    except (TypeError, ValueError):
+        category = None
+    if not category:
+        return RedirectResponse(_panel_url(error='Choose a valid category. Add categories from Products first.'), status_code=303)
+
+    try:
         walkout_remark, walkout_reason, competitor_shop = walkout_values(db, form, status, visit)
         if status == "Walkout":
             remark = walkout_remark
@@ -833,9 +1043,11 @@ async def edit_customer_visit(
         else:
             custom_values.pop(str(field.id), None)
 
+    remember_walkout(db, visit)
     visit.customer_name = customer_name
     visit.mobile_number = mobile_number
     visit.product_type_id = product_type.id
+    visit.category_id = category.id
     visit.handled_by_id = handled_by.id if handled_by else None
     visit.assigned_manager_id = assigned_manager.id if assigned_manager else None
     visit.store_id = store.id
@@ -845,8 +1057,104 @@ async def edit_customer_visit(
     visit.walkout_reason = walkout_reason or None
     visit.competitor_shop = competitor_shop or None
     visit.custom_fields = json.dumps(custom_values, ensure_ascii=False)
-    db.commit()
+    remember_walkout(db, visit)
+    if not _commit_visit_change(db):
+        return RedirectResponse(_panel_url(error='Billed entries are locked. Refresh the page.'), status_code=303)
     return RedirectResponse(_panel_url(message="Customer visit updated."), status_code=303)
+
+
+def _walkout_report_redirect(form, message='', error=''):
+    target = urlsplit(str(form.get('return_to', '')))
+    allowed = {'date_from', 'date_to', 'store_id', 'manager_id', 'sales_person_id',
+               'walkout_reason', 'competitor_shop', 'walkout_page', 'per_page'}
+    params = {key: value for key, value in parse_qsl(target.query)
+              if key in allowed} if target.path in ('/cre/reports', '/cre/walkout-register') and not target.netloc else {}
+    destination = '/cre/walkout-register' if target.path == '/cre/walkout-register' and not target.netloc else '/cre/reports'
+    if destination == '/cre/reports':
+        params.update(tab='walkout')
+    if message:
+        params['message'] = message
+    if error:
+        params['error'] = error
+    return RedirectResponse(destination + '?' + urlencode(params), status_code=303)
+
+
+def _commit_visit_change(db):
+    try:
+        db.commit()
+        return True
+    except IntegrityError:
+        db.rollback()
+        return False
+
+
+@router.post('/cre/reports/walkouts/{visit_id}/followups/{slot}')
+def save_walkout_followup(
+    visit_id: int, slot: int, request: Request,
+    db: Session = Depends(get_db),
+    current_user: AdminUser = Depends(require_customer_relations_access),
+    form: FormData = Depends(_read_form),
+):
+    visit = db.get(CustomerVisit, visit_id)
+    if not visit or not (visit.walkout_record or visit.status == 'Walkout'):
+        return _walkout_report_redirect(form, error='Walkout visit was not found.')
+    if visit.status == 'Billed':
+        return _walkout_report_redirect(form, error='Billed entries are locked. No further changes are allowed.')
+    note = str(form.get('note', '')).strip()
+    if slot not in (1, 2, 3) or not note or len(note) > 1000:
+        return _walkout_report_redirect(form, error='Add a follow-up note up to 1000 characters.')
+    saved = {item.slot for item in visit.followups}
+    if slot in saved:
+        return _walkout_report_redirect(form, error='This follow-up is already saved and locked.')
+    if any(previous not in saved for previous in range(1, slot)):
+        return _walkout_report_redirect(form, error='Save the earlier follow-up first.')
+    remember_walkout(db, visit)
+    db.add(CreWalkoutFollowup(visit_id=visit.id, slot=slot, note=note, created_by=current_user.id))
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return _walkout_report_redirect(form, error='This follow-up is already saved and locked.')
+    return _walkout_report_redirect(form, message=f'Follow-up {slot} saved and locked.')
+
+
+@router.post('/cre/reports/walkouts/{visit_id}/edit')
+@router.post('/cre/reports/walkouts/{visit_id}/outcome')
+def update_walkout_outcome(
+    visit_id: int, request: Request, db: Session = Depends(get_db),
+    current_user: AdminUser = Depends(require_customer_relations_access),
+    form: FormData = Depends(_read_form),
+):
+    visit = db.get(CustomerVisit, visit_id)
+    if not visit or not (visit.walkout_record or visit.status == 'Walkout'):
+        return _walkout_report_redirect(form, error='Walkout visit was not found.')
+    if visit.status == 'Billed':
+        return _walkout_report_redirect(form, error='Billed entries are locked. No further changes are allowed.')
+    if set(form) - {'status', 'walkout_reason', 'competitor_shop', 'return_to'}:
+        return _walkout_report_redirect(form, error='Only status, walkout reason and competitor can be edited here.')
+    status = str(form.get('status', ''))
+    if status not in ('Walkout', 'Billed'):
+        return _walkout_report_redirect(form, error='Choose Walkout or Billed as the final status.')
+    remember_walkout(db, visit)
+    previous_reason = visit.walkout_reason or (visit.walkout_record.reason if visit.walkout_record else '')
+    previous_competitor = visit.competitor_shop or (visit.walkout_record.competitor if visit.walkout_record else '')
+    editing = request.url.path.endswith('/edit')
+    reason = str(form.get('walkout_reason', '' if editing else previous_reason) or '').strip()
+    competitor = str(form.get('competitor_shop', '' if editing else previous_competitor) or '').strip()
+    if (editing or 'walkout_reason' in form) and not valid_option(db, 'reason', reason, previous_reason):
+        return _walkout_report_redirect(form, error='Choose a valid walkout reason.')
+    if competitor and not valid_option(db, 'competitor', competitor, previous_competitor):
+        return _walkout_report_redirect(form, error='Choose a valid competitor shop.')
+    visit.walkout_reason = reason or None
+    visit.competitor_shop = competitor or None
+    if visit.walkout_record:
+        visit.walkout_record.reason = reason or None
+        visit.walkout_record.competitor = competitor or None
+    visit.activity_type = 'New Jewellery'
+    visit.status = status
+    if not _commit_visit_change(db):
+        return _walkout_report_redirect(form, error='Billed entries are locked. Refresh the page.')
+    return _walkout_report_redirect(form, message=f'Walkout details saved. Status: {status}.')
 
 
 def _create_staff(db: Session, name: str, staff_type: str, created_by: int):
@@ -865,7 +1173,7 @@ def _create_staff(db: Session, name: str, staff_type: str, created_by: int):
 
 
 @router.get("/cre/sales-people", response_class=HTMLResponse)
-async def sales_people_page(
+def sales_people_page(
     request: Request,
     message: str = Query(default="", max_length=120),
     error: str = Query(default="", max_length=160),
@@ -880,7 +1188,7 @@ async def sales_people_page(
 
 
 @router.post("/cre/sales-people")
-async def add_sales_person(
+def add_sales_person(
     name: str = Form(..., max_length=100),
     db: Session = Depends(get_db),
     current_user: AdminUser = Depends(require_cre_manager_access),
@@ -892,7 +1200,7 @@ async def add_sales_person(
 
 
 @router.get("/cre/managers", response_class=HTMLResponse)
-async def managers_page(
+def managers_page(
     request: Request,
     message: str = Query(default="", max_length=120),
     error: str = Query(default="", max_length=160),
@@ -907,7 +1215,7 @@ async def managers_page(
 
 
 @router.post("/cre/managers")
-async def add_manager(
+def add_manager(
     name: str = Form(..., max_length=100),
     db: Session = Depends(get_db),
     current_user: AdminUser = Depends(require_cre_owner_access),
@@ -919,7 +1227,7 @@ async def add_manager(
 
 
 @router.get("/cre/products", response_class=HTMLResponse)
-async def products_page(
+def products_page(
     request: Request,
     message: str = Query(default="", max_length=120),
     error: str = Query(default="", max_length=160),
@@ -929,12 +1237,12 @@ async def products_page(
     products = db.query(CustomerProductType).order_by(func.lower(CustomerProductType.name)).all()
     return _render_cre_page(
         "cre_products.html", request, current_user,
-        products=products, message=message, error=error,
+        products=products, categories=db.query(CustomerProductCategory).order_by(CustomerProductCategory.name).all(), message=message, error=error,
     )
 
 
 @router.post("/cre/products")
-async def add_product(
+def add_product(
     name: str = Form(..., max_length=80),
     db: Session = Depends(get_db),
     current_user: AdminUser = Depends(require_cre_manager_access),
@@ -950,8 +1258,25 @@ async def add_product(
     return RedirectResponse(_panel_url(message="Product added to the customer form.", path=path), status_code=303)
 
 
+@router.post('/cre/categories')
+def add_product_category(
+    name: str = Form(..., max_length=80), db: Session = Depends(get_db),
+    current_user: AdminUser = Depends(require_cre_manager_access),
+):
+    name = ' '.join(name.split())
+    if not name:
+        return RedirectResponse(_panel_url(error='Enter a category name.', path='/cre/products'), status_code=303)
+    db.add(CustomerProductCategory(name=name, created_by=current_user.id))
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return RedirectResponse(_panel_url(error='That category already exists.', path='/cre/products'), status_code=303)
+    return RedirectResponse(_panel_url(message='Category added to the customer form.', path='/cre/products'), status_code=303)
+
+
 @router.get("/cre/fields", response_class=HTMLResponse)
-async def fields_page(
+def fields_page(
     request: Request,
     message: str = Query(default="", max_length=120),
     error: str = Query(default="", max_length=160),
@@ -970,7 +1295,7 @@ async def fields_page(
 
 
 @router.post("/cre/fields")
-async def add_form_field(
+def add_form_field(
     label: str = Form(..., max_length=80),
     field_type: str = Form(..., max_length=20),
     options: str = Form(default="", max_length=1000),
@@ -1004,7 +1329,7 @@ async def add_form_field(
 
 
 @router.post("/cre/fields/{field_id}/remove")
-async def remove_form_field(
+def remove_form_field(
     field_id: int,
     db: Session = Depends(get_db),
     current_user: AdminUser = Depends(require_cre_manager_access),
@@ -1025,7 +1350,7 @@ async def remove_form_field(
 
 
 @router.post("/cre/fields/{field_id}/restore")
-async def restore_form_field(
+def restore_form_field(
     field_id: int,
     db: Session = Depends(get_db),
     current_user: AdminUser = Depends(require_cre_manager_access),
@@ -1046,7 +1371,7 @@ async def restore_form_field(
 
 
 @router.get("/cre/walkout-options", response_class=HTMLResponse)
-async def walkout_options_page(
+def walkout_options_page(
     request: Request, message: str = "", error: str = "",
     db: Session = Depends(get_db),
     current_user: AdminUser = Depends(require_cre_manager_access),
@@ -1061,7 +1386,7 @@ async def walkout_options_page(
 
 
 @router.post("/cre/walkout-options/{kind}")
-async def add_walkout_option(
+def add_walkout_option(
     kind: str, name: str = Form(..., max_length=100),
     db: Session = Depends(get_db),
     current_user: AdminUser = Depends(require_cre_manager_access),
@@ -1083,7 +1408,7 @@ async def add_walkout_option(
 
 
 @router.post("/cre/walkout-options/{option_id}/{action}")
-async def toggle_walkout_option(
+def toggle_walkout_option(
     option_id: int, action: str, db: Session = Depends(get_db),
     current_user: AdminUser = Depends(require_cre_manager_access),
 ):

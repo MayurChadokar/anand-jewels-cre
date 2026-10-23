@@ -23,7 +23,7 @@
     <div class="card-header bg-white p-3 d-flex align-items-center justify-content-between"><h2 class="h6 mb-0">{{ page_title }}</h2><span class="badge text-bg-light">{{ staff|length }}</span></div>
     {% if staff %}
     <div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0"><thead class="table-light"><tr><th class="ps-3">Name</th><th>Added</th></tr></thead><tbody>
-        {% for member in staff %}<tr><td class="ps-3 fw-semibold">{{ member.name }}</td><td><small class="text-muted">{{ member.created_at.strftime('%d %b %Y') if member.created_at else '—' }}</small></td></tr>{% endfor %}
+        {% for member in staff %}<tr><td class="ps-3 fw-semibold">{{ member.name }}</td><td><small class="text-muted">{{ member.created_at|ist('%d %b %Y') if member.created_at else '—' }}</small></td></tr>{% endfor %}
     </tbody></table></div>
     {% else %}<div class="text-center text-muted py-4">No {{ page_title|lower }} added yet.</div>{% endif %}
 </div>

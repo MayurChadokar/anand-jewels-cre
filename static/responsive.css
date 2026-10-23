@@ -37,6 +37,13 @@ body.cre-sidebar-collapsed #desktopSidebar .nav-link {
 .cre-login-column { max-width: 480px; }
 .cre-login main { min-height: 100dvh !important; }
 .cre-login img { max-width: 100% !important; }
+.cre-login .form-control { font-size: 16px; min-height: 44px; }
+.cre-login .btn { min-height: 44px; }
+
+@media (max-height: 500px) and (max-width: 1399.98px) {
+    .cre-login .cre-login-brand { width: 140px; padding: 8px 16px; margin-bottom: .5rem; }
+    .cre-login .card > .text-center { padding-top: 1rem !important; }
+}
 
 @media (max-width: 1399.98px) {
     #desktopSidebar { display: none !important; }

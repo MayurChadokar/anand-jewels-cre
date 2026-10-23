@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 from database import init_db
 from routers.customer_relations import router
 from settings import COOKIE_NAME, COOKIE_SECURE, STATIC_DIR, session_secret
@@ -14,13 +15,14 @@ async def lifespan(app):
 app = FastAPI(title='Anand Jewels CRE', version='1.0.0', lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key=session_secret(), session_cookie=COOKIE_NAME,
                    max_age=86400, same_site='lax', https_only=COOKIE_SECURE)
+app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 app.mount('/static', StaticFiles(directory=str(STATIC_DIR)), name='static')
 app.include_router(router)
 @app.get('/', include_in_schema=False)
 async def root():
     return RedirectResponse('/cre')
 @app.get('/health')
-async def health():
+def health():
     from sqlalchemy import text
     from database import engine
     with engine.connect() as connection:
