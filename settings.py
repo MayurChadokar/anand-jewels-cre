@@ -11,6 +11,7 @@ TEMPLATE_DIR = BASE_DIR / 'templates'
 STATIC_DIR = BASE_DIR / 'static'
 COOKIE_NAME = os.getenv('CRE_SESSION_COOKIE', 'anand_cre_session')
 COOKIE_SECURE = os.getenv('CRE_COOKIE_SECURE', 'false').lower() == 'true'
+FEEDBACK_AUTO_SEND = os.getenv('FEEDBACK_AUTO_SEND', 'true').lower() == 'true'
 def session_secret():
     value = os.getenv('CRE_SECRET_KEY')
     if value:

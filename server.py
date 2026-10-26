@@ -1,6 +1,7 @@
 import argparse
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
@@ -13,6 +14,13 @@ async def lifespan(app):
     init_db()
     yield
 app = FastAPI(title='Anand Jewels CRE', version='1.0.0', lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['https://anandjewels.com', 'https://www.anandjewels.com'],
+    allow_credentials=False,
+    allow_methods=['POST', 'OPTIONS'],
+    allow_headers=['Content-Type'],
+)
 app.add_middleware(SessionMiddleware, secret_key=session_secret(), session_cookie=COOKIE_NAME,
                    max_age=86400, same_site='lax', https_only=COOKIE_SECURE)
 app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)

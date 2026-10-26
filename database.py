@@ -27,3 +27,9 @@ def init_db():
     migrate_002_walkout_followups(engine)
     from query_indexes import migrate_004_query_indexes
     migrate_004_query_indexes(engine)
+    from store_scope import migrate_005_store_scope
+    migrate_005_store_scope(engine)
+    from visit_numbers import migrate_006_store_visit_numbers
+    migrate_006_store_visit_numbers(engine)
+    from product_selection import migrate_007_optional_product_selection
+    migrate_007_optional_product_selection(engine)

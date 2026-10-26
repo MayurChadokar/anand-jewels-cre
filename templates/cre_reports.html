@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% from "_pagination.html" import pager %}
+{% macro report_excel_button(section) -%}
+<a class="btn btn-success btn-sm" href="/cre/reports/export/excel?section={{ section }}&date_from={{ date_from.isoformat() }}&date_to={{ date_to.isoformat() }}&city={{ selected_city|urlencode }}&store_id={{ selected_store_id }}&manager_id={{ selected_manager_id }}&sales_person_id={{ selected_sales_person_id }}&walkout_reason={{ selected_walkout_reason|urlencode }}&competitor_shop={{ selected_competitor_shop|urlencode }}&q={{ search_query|urlencode }}"><i class="bi bi-file-earmark-excel me-1"></i>Download Excel</a>
+{%- endmacro %}
 
 {% block title %}{{ 'Walkout Register' if standalone_walkout else 'CRE Reports' }} - Anand Jewels{% endblock %}
 
@@ -63,10 +66,10 @@
     <div>
         <div class="text-uppercase small fw-semibold text-danger mb-1">Customer Relations</div>
         <h1 class="h3 mb-1" id="walkoutRegisterHeading">{{ 'Walkout Register' if standalone_walkout else 'Walk-in Reports' }}</h1>
-        <p class="text-muted mb-0">{% if standalone_walkout and date_from.year == 1900 %}All recorded visits through {{ date_to.strftime('%d %b %Y') }}{% else %}{{ date_from.strftime('%d %b %Y') }} to {{ date_to.strftime('%d %b %Y') }}{% endif %}</p>
+        <p class="text-muted mb-0">{% if search_query %}Search results across all dates{% elif standalone_walkout and date_from.year == 1900 %}All recorded visits through {{ date_to.strftime('%d %b %Y') }}{% else %}{{ date_from.strftime('%d %b %Y') }} to {{ date_to.strftime('%d %b %Y') }}{% endif %}</p>
     </div>
     <div class="d-flex flex-wrap gap-2 report-actions">
-        <a class="btn btn-success" href="{{ '/cre/walkout-register/export/excel' if standalone_walkout else '/cre/reports/export/excel' }}?date_from={{ date_from.isoformat() }}&date_to={{ date_to.isoformat() }}&store_id={{ selected_store_id }}&manager_id={{ selected_manager_id }}&sales_person_id={{ selected_sales_person_id }}&walkout_reason={{ selected_walkout_reason|urlencode }}&competitor_shop={{ selected_competitor_shop|urlencode }}"><i class="bi bi-file-earmark-excel me-1"></i>Download Excel</a>
+        <a class="btn btn-success" href="{{ '/cre/walkout-register/export/excel' if standalone_walkout else '/cre/reports/export/excel' }}?date_from={{ date_from.isoformat() }}&date_to={{ date_to.isoformat() }}&city={{ selected_city|urlencode }}&store_id={{ selected_store_id }}&manager_id={{ selected_manager_id }}&sales_person_id={{ selected_sales_person_id }}&walkout_reason={{ selected_walkout_reason|urlencode }}&competitor_shop={{ selected_competitor_shop|urlencode }}&q={{ search_query|urlencode }}"><i class="bi bi-file-earmark-excel me-1"></i>{{ 'Download Excel' if standalone_walkout else 'Download Complete Excel' }}</a>
     </div>
 </div>
 
@@ -77,18 +80,20 @@
 <form method="get" action="/cre/reports" class="card border-0 shadow-sm p-3 mb-4 report-filters">
             <input type="hidden" name="per_page" value="{{ per_page }}">
     <input type="hidden" name="tab" id="reportActiveTab" value="{{ active_tab }}">
+    <input type="hidden" name="q" value="{{ search_query }}">
     <div class="row g-2 align-items-end">
         <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="report-date-from">From</label><input class="form-control" id="report-date-from" type="date" name="date_from" value="{{ date_from.isoformat() }}"></div>
         <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="report-date-to">To</label><input class="form-control" id="report-date-to" type="date" name="date_to" value="{{ date_to.isoformat() }}"></div>
-        <div class="col-sm-6 col-lg-3"><label class="form-label mb-1" for="report-store">Store</label><select class="form-select" id="report-store" name="store_id"><option value="0">All stores</option>{% for store in stores %}<option value="{{ store.id }}" {% if selected_store_id == store.id %}selected{% endif %}>{{ store.store_name }}</option>{% endfor %}</select></div>
-        <div class="col-sm-6 col-lg-3"><label class="form-label mb-1" for="report-manager">Manager</label><select class="form-select" id="report-manager" name="manager_id"><option value="0">All managers</option>{% for manager in managers %}<option value="{{ manager.id }}" {% if selected_manager_id == manager.id %}selected{% endif %}>{{ manager.name }}</option>{% endfor %}</select></div>
+        {% if is_super_admin %}<div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="report-city">City</label><select class="form-select" id="report-city" name="city"><option value="">All cities</option>{% for city in cities %}<option value="{{ city }}" {% if selected_city == city %}selected{% endif %}>{{ city }}</option>{% endfor %}</select></div>{% else %}<input type="hidden" name="city" value="{{ selected_city }}">{% endif %}
+        <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="report-store">Store</label>{% if is_super_admin %}<select class="form-select" id="report-store" name="store_id"><option value="0">All stores in city</option>{% for store in stores %}<option value="{{ store.id }}" data-city="{{ store.city }}" {% if selected_store_id == store.id %}selected{% endif %}>{{ store.store_name }}</option>{% endfor %}</select>{% else %}<input class="form-control" id="report-store" value="{{ stores[0].store_name }}" readonly><input type="hidden" name="store_id" value="{{ selected_store_id }}">{% endif %}</div>
+        <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="report-manager">Manager</label><select class="form-select" id="report-manager" name="manager_id"><option value="0">All managers</option>{% for manager in managers %}<option value="{{ manager.id }}" {% if selected_manager_id == manager.id %}selected{% endif %}>{{ manager.name }}</option>{% endfor %}</select></div>
         <div class="col-lg-2 d-grid"><button class="btn btn-danger" type="submit"><i class="bi bi-funnel me-1"></i>Generate Report</button></div>
     </div>
 </form>
 
 <div class="report-title-band text-center py-2 px-3 mb-4">
     <div class="fw-semibold">ANAND JEWELS &mdash; CUSTOMER WALK-IN REPORT</div>
-    <small>{{ date_from.strftime('%d %B %Y') }} to {{ date_to.strftime('%d %B %Y') }}</small>
+    <small>{% if search_query %}Search results across all dates{% else %}{{ date_from.strftime('%d %B %Y') }} to {{ date_to.strftime('%d %B %Y') }}{% endif %}</small>
 </div>
 
 <ul class="nav nav-tabs report-tabs mb-4" id="reportTabs" role="tablist">
@@ -104,6 +109,7 @@
 <div class="tab-content" id="reportTabsContent">
 {% if not standalone_walkout %}
     <section class="tab-pane fade {% if active_tab == 'overview' %}show active{% endif %}" id="overview-panel" role="tabpanel" aria-labelledby="overview-tab">
+        <div class="d-flex justify-content-end mb-3">{{ report_excel_button('overview') }}</div>
         <div class="row g-3 mb-4">
             <div class="col-6 col-xl-3"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-muted small">Total walk-ins</div><div class="display-6 fw-semibold">{{ report.summary.total }}</div></div></div></div>
             <div class="col-6 col-xl-3"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-muted small">Billed</div><div class="display-6 fw-semibold text-success">{{ report.summary.billed }}</div><small class="text-muted">{{ '%.2f'|format(report.summary.billed_percent) }}% conversion</small></div></div></div>
@@ -122,6 +128,7 @@
     </section>
 
     <section class="tab-pane fade {% if active_tab == 'walkin' %}show active{% endif %}" id="walkin-panel" role="tabpanel" aria-labelledby="walkin-tab">
+        <div class="d-flex justify-content-end mb-3">{{ report_excel_button('walkin') }}</div>
         <div class="row g-3 mb-4">
             <div class="col-6 col-xl-3"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-muted small">Total walk-ins</div><div class="display-6 fw-semibold">{{ report.summary.total }}</div></div></div></div>
             <div class="col-6 col-xl-3"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-muted small">Billed</div><div class="display-6 fw-semibold text-success">{{ report.summary.billed }}</div><small class="text-muted">{{ '%.2f'|format(report.summary.billed_percent) }}%</small></div></div></div>
@@ -137,18 +144,30 @@
         <form method="get" action="{{ '/cre/walkout-register' if standalone_walkout else '/cre/reports' }}" class="card border-0 shadow-sm p-3 mb-4">
             <input type="hidden" name="per_page" value="{{ per_page }}">
             <input type="hidden" name="tab" value="walkout">
+            <input type="hidden" name="sales_person_id" value="{{ selected_sales_person_id }}">
+            <input type="hidden" name="competitor_shop" value="{{ selected_competitor_shop }}">
+            <input type="hidden" name="city" value="{{ selected_city }}">
             <div class="row g-2 align-items-end">
-                <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="walkout-from">From</label><input class="form-control" id="walkout-from" type="date" name="date_from" value="{{ date_from.isoformat() if date_from.year != 1900 else '' }}"></div>
+                <div class="col-sm-6 col-lg-3">
+                    <label class="form-label mb-1" for="walkout-search">Search</label>
+                    <div class="input-group input-group-sm">
+                        <input class="form-control" id="walkout-search" type="search" name="q" value="{{ search_query }}" placeholder="Name, mobile or visit no." aria-label="Search by name, mobile or visit number" maxlength="120">
+                        <button class="btn btn-outline-danger" type="submit" aria-label="Search walkout register" title="Search"><i class="bi bi-search" aria-hidden="true"></i></button>
+                    </div>
+                    <small class="text-muted">Search covers all dates.</small>
+                    {% if search_query %}<a class="btn btn-outline-secondary btn-sm mt-2" href="{{ clear_search_url }}">Clear search</a>{% endif %}
+                </div>
+                <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="walkout-from">From</label><input class="form-control" id="walkout-from" type="date" name="date_from" value="{{ date_from.isoformat() }}"></div>
                 <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="walkout-to">To</label><input class="form-control" id="walkout-to" type="date" name="date_to" value="{{ date_to.isoformat() }}"></div>
-                <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="walkout-store">Store</label><select class="form-select" id="walkout-store" name="store_id"><option value="0">All stores</option>{% for store in stores %}<option value="{{ store.id }}" {% if selected_store_id == store.id %}selected{% endif %}>{{ store.store_name }}</option>{% endfor %}</select></div>
+                <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="walkout-store">Store</label>{% if is_super_admin %}<select class="form-select" id="walkout-store" name="store_id"><option value="0">All stores</option>{% for store in stores %}<option value="{{ store.id }}" {% if selected_store_id == store.id %}selected{% endif %}>{{ store.store_name }}</option>{% endfor %}</select>{% else %}<input class="form-control" id="walkout-store" value="{{ stores[0].store_name }}" readonly><input type="hidden" name="store_id" value="{{ selected_store_id }}">{% endif %}</div>
                 <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="walkout-manager">Manager</label><select class="form-select" id="walkout-manager" name="manager_id"><option value="0">All managers</option>{% for manager in managers %}<option value="{{ manager.id }}" {% if selected_manager_id == manager.id %}selected{% endif %}>{{ manager.name }}</option>{% endfor %}</select></div>
                 <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="walkout-reason">Walkout reason</label><select class="form-select" id="walkout-reason" name="walkout_reason"><option value="">All reasons</option>{% for reason in walkout_reasons %}<option value="{{ reason }}" {% if selected_walkout_reason == reason %}selected{% endif %}>{{ reason }}</option>{% endfor %}</select></div>
-                <div class="col-sm-6 col-lg-2 d-grid"><button class="btn btn-danger" type="submit"><i class="bi bi-funnel me-1"></i>Apply filter</button></div>
+                <div class="col-sm-6 col-lg-2 d-grid"><button class="btn btn-danger" type="submit"><i class="bi bi-funnel me-1"></i>Apply filters</button></div>
             </div>
         </form>
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
-            <div><h2 class="h5 mb-1">Walkout register <span class="report-count">{{ report.register_metrics.total }}</span></h2><p class="text-muted small mb-0">Complete list for the selected dates. Newest visits first. Saved follow-ups are permanent.</p></div>
-            <a class="btn btn-outline-danger btn-sm" href="{{ '/cre/walkout-register' if standalone_walkout else '/cre/reports' }}?per_page={{ per_page }}&tab=walkout&date_from=1900-01-01&date_to={{ today_iso }}&store_id={{ selected_store_id }}&manager_id={{ selected_manager_id }}&sales_person_id={{ selected_sales_person_id }}&walkout_reason={{ selected_walkout_reason|urlencode }}&competitor_shop={{ selected_competitor_shop|urlencode }}"><i class="bi bi-list-ul me-1"></i>Show all dates</a>
+            <div><h2 class="h5 mb-1">Walkout register <span class="report-count">{{ report.register_metrics.total }}</span></h2><p class="text-muted small mb-0">{% if search_query %}Matching visits across all dates.{% else %}Complete list for the selected dates.{% endif %} Newest visits first. Saved follow-ups are permanent.</p></div>
+            <div class="d-flex gap-2">{% if not standalone_walkout %}{{ report_excel_button('walkout') }}{% endif %}<a class="btn btn-outline-danger btn-sm" href="{{ '/cre/walkout-register' if standalone_walkout else '/cre/reports' }}?per_page={{ per_page }}&tab=walkout&date_from=2026-01-01&date_to={{ today_iso }}&city={{ selected_city|urlencode }}&store_id={{ selected_store_id }}&manager_id={{ selected_manager_id }}&sales_person_id={{ selected_sales_person_id }}&walkout_reason={{ selected_walkout_reason|urlencode }}&competitor_shop={{ selected_competitor_shop|urlencode }}&q={{ search_query|urlencode }}"><i class="bi bi-list-ul me-1"></i>Reset dates</a></div>
         </div>
         <div class="row g-3 mb-4">
             <div class="col-sm-6 col-xl-3"><div class="report-mini-stat"><span class="text-muted small">Registered walkouts</span><strong>{{ report.register_metrics.total }}</strong></div></div>
@@ -185,7 +204,7 @@
                         {% endfor %}
                         <td><span class="badge {{ 'text-bg-success' if row.status == 'Billed' else 'text-bg-danger' if row.status == 'Walkout' else 'text-bg-warning' }} mb-2">{{ row.status }}</span>{% if row.status != 'Billed' %}<div><button class="btn btn-sm btn-outline-danger" type="button" data-bs-toggle="modal" data-bs-target="#walkoutEditModal" data-visit-id="{{ row.id }}" data-visit-number="{{ row.visit_number }}" data-customer="{{ row.customer_name }}" data-mobile="{{ row.mobile_number }}" data-product="{{ row.product }}" data-category="{{ row.category }}" data-status="{{ row.status }}" data-reason="{{ row.reason if row.reason != 'Not recorded' else '' }}" data-competitor="{{ row.competitor if row.competitor != 'Not recorded' else '' }}"><i class="bi bi-pencil-square me-1" aria-hidden="true"></i>Edit</button></div>{% else %}<div class="text-success small"><i class="bi bi-lock-fill me-1" aria-hidden="true"></i>Locked</div>{% endif %}</td>
                     </tr>
-                    {% else %}<tr><td colspan="10" class="text-center text-muted py-5"><i class="bi bi-journal-check fs-2 d-block mb-2"></i>No walkouts for the selected filters. Try Show all dates.</td></tr>{% endfor %}
+                    {% else %}<tr><td colspan="10" class="text-center text-muted py-5"><i class="bi bi-journal-check fs-2 d-block mb-2"></i>No walkouts for the selected filters. Try clearing the search or adjusting the filters.</td></tr>{% endfor %}
                     </tbody>
                 </table>
             </div>
@@ -198,6 +217,8 @@
         <form method="get" action="/cre/reports" class="card border-0 shadow-sm p-3 mb-4">
             <input type="hidden" name="per_page" value="{{ per_page }}">
             <input type="hidden" name="tab" value="competitor">
+            <input type="hidden" name="q" value="{{ search_query }}">
+            <input type="hidden" name="city" value="{{ selected_city }}">
             <div class="row g-2 align-items-end">
                 <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="competitor-from">From</label><input class="form-control" id="competitor-from" type="date" name="date_from" value="{{ date_from.isoformat() }}"></div>
                 <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="competitor-to">To</label><input class="form-control" id="competitor-to" type="date" name="date_to" value="{{ date_to.isoformat() }}"></div>
@@ -206,6 +227,7 @@
                 <div class="col-sm-6 col-lg-2 d-grid"><button class="btn btn-danger" type="submit"><i class="bi bi-funnel me-1"></i>Apply filter</button></div>
             </div>
         </form>
+        <div class="d-flex justify-content-end mb-3">{{ report_excel_button('competitor') }}</div>
         <div class="row g-4"><div class="col-lg-4"><section class="card report-card border shadow-sm"><div class="card-header bg-white border-0 pt-3"><h2 class="h6 mb-0">Lost to competitor's shop</h2></div><div class="table-responsive"><table class="table table-bordered table-sm"><thead><tr><th>Competitor</th><th class="text-end">Walkouts</th></tr></thead><tbody>{% for row in report.competitor_rows %}<tr><td>{{ row.name }}</td><td class="text-end">{{ row.count }}</td></tr>{% else %}<tr><td colspan="2" class="text-center text-muted py-3">No competitor information.</td></tr>{% endfor %}{% if report.competitor_rows %}<tr class="report-total-row"><td>Total</td><td class="text-end">{{ report.summary.walkouts }}</td></tr>{% endif %}</tbody></table></div></section></div><div class="col-lg-8"><div class="card border shadow-sm"><div class="card-header bg-white border-0 pt-3"><h2 class="h6 mb-0">Competitor loss details</h2></div><div class="table-responsive"><table class="table table-hover report-data-table mb-0"><thead><tr><th>Date</th><th>Visit No.</th><th>Customer</th><th>Store</th><th>Competitor</th><th>Reason</th><th>Manager</th></tr></thead><tbody>{% for row in report.competitor_visits %}<tr><td class="text-nowrap">{{ row.date|ist }}</td><td class="cre-visit-reference">{{ row.visit_number }}</td><td>{{ row.customer_name }}</td><td>{{ row.store_name }}</td><td>{{ row.competitor }}</td><td>{{ row.reason }}</td><td>{{ row.manager }}</td></tr>{% else %}<tr><td colspan="7" class="text-center text-muted py-4">No competitor losses for the selected filters.</td></tr>{% endfor %}</tbody></table></div></div></div></div>
         {{ pager(report_pages.competitor, 'Competitor') }}
     </section>
@@ -214,6 +236,8 @@
         <form method="get" action="/cre/reports" class="card border-0 shadow-sm p-3 mb-4">
             <input type="hidden" name="per_page" value="{{ per_page }}">
             <input type="hidden" name="tab" value="manager">
+            <input type="hidden" name="q" value="{{ search_query }}">
+            <input type="hidden" name="city" value="{{ selected_city }}">
             <div class="row g-2 align-items-end">
                 <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="manager-from">From</label><input class="form-control" id="manager-from" type="date" name="date_from" value="{{ date_from.isoformat() }}"></div>
                 <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="manager-to">To</label><input class="form-control" id="manager-to" type="date" name="date_to" value="{{ date_to.isoformat() }}"></div>
@@ -222,6 +246,7 @@
                 <div class="col-sm-6 col-lg-2 d-grid"><button class="btn btn-danger" type="submit"><i class="bi bi-funnel me-1"></i>Apply filter</button></div>
             </div>
         </form>
+        <div class="d-flex justify-content-end mb-3">{{ report_excel_button('manager') }}</div>
         <div class="card border shadow-sm"><div class="card-header bg-white border-0 pt-3"><h2 class="h6 mb-0">Manager performance report</h2></div><div class="table-responsive"><table class="table table-hover report-data-table mb-0"><thead><tr><th>Manager</th><th class="text-end">Total visits</th><th class="text-end">Walkouts</th><th class="text-end">Billed</th><th class="text-end">Conversion</th></tr></thead><tbody>{% for row in report.manager_page_rows %}<tr><td>{{ row.name }}</td><td class="text-end">{{ row.visits }}</td><td class="text-end text-danger">{{ row.walkouts }}</td><td class="text-end text-success">{{ row.billed }}</td><td class="text-end">{{ '%.2f'|format(row.conversion_rate) }}%</td></tr>{% else %}<tr><td colspan="5" class="text-center text-muted py-4">No manager data for the selected filters.</td></tr>{% endfor %}{% if report.manager_rows %}<tr class="report-total-row"><td>Total</td><td class="text-end">{{ report.summary.total }}</td><td class="text-end">{{ report.summary.walkouts }}</td><td class="text-end">{{ report.summary.billed }}</td><td class="text-end">{{ '%.2f'|format(report.summary.billed_percent) }}%</td></tr>{% endif %}</tbody></table></div></div>
         {{ pager(report_pages.manager, 'Manager') }}
     </section>
@@ -230,6 +255,8 @@
         <form method="get" action="/cre/reports" class="card border-0 shadow-sm p-3 mb-4">
             <input type="hidden" name="per_page" value="{{ per_page }}">
             <input type="hidden" name="tab" value="sales">
+            <input type="hidden" name="q" value="{{ search_query }}">
+            <input type="hidden" name="city" value="{{ selected_city }}">
             <div class="row g-2 align-items-end">
                 <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="sales-from">From</label><input class="form-control" id="sales-from" type="date" name="date_from" value="{{ date_from.isoformat() }}"></div>
                 <div class="col-sm-6 col-lg-2"><label class="form-label mb-1" for="sales-to">To</label><input class="form-control" id="sales-to" type="date" name="date_to" value="{{ date_to.isoformat() }}"></div>
@@ -238,6 +265,7 @@
                 <div class="col-sm-6 col-lg-2 d-grid"><button class="btn btn-danger" type="submit"><i class="bi bi-funnel me-1"></i>Apply filter</button></div>
             </div>
         </form>
+        <div class="d-flex justify-content-end mb-3">{{ report_excel_button('sales') }}</div>
         <div class="card border shadow-sm"><div class="card-header bg-white border-0 pt-3"><h2 class="h6 mb-0">Sales person performance report</h2></div><div class="table-responsive"><table class="table table-hover report-data-table mb-0"><thead><tr><th>Sales person</th><th class="text-end">Total visits</th><th class="text-end">Walkouts</th><th class="text-end">Billed</th><th class="text-end">Conversion</th></tr></thead><tbody>{% for row in report.sales_page_rows %}<tr><td>{{ row.name }}</td><td class="text-end">{{ row.visits }}</td><td class="text-end text-danger">{{ row.walkouts }}</td><td class="text-end text-success">{{ row.billed }}</td><td class="text-end">{{ '%.2f'|format(row.conversion_rate) }}%</td></tr>{% else %}<tr><td colspan="5" class="text-center text-muted py-4">No sales data for the selected filters.</td></tr>{% endfor %}{% if report.sales_rows %}<tr class="report-total-row"><td>Total</td><td class="text-end">{{ report.summary.total }}</td><td class="text-end">{{ report.summary.walkouts }}</td><td class="text-end">{{ report.summary.billed }}</td><td class="text-end">{{ '%.2f'|format(report.summary.billed_percent) }}%</td></tr>{% endif %}</tbody></table></div></div>
         {{ pager(report_pages.sales, 'Sales') }}
     </section>
@@ -276,6 +304,20 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    const citySelect = document.getElementById('report-city');
+    const storeSelect = document.getElementById('report-store');
+    function filterStoresByCity() {
+        if (!citySelect || !storeSelect) return;
+        const city = citySelect.value;
+        Array.from(storeSelect.options).forEach(function (option) {
+            if (option.value === '0') return;
+            option.hidden = Boolean(city && option.dataset.city !== city);
+        });
+        const selected = storeSelect.options[storeSelect.selectedIndex];
+        if (selected && selected.hidden) storeSelect.value = '0';
+    }
+    if (citySelect) citySelect.addEventListener('change', filterStoresByCity);
+    filterStoresByCity();
     const modal = document.getElementById('followupModal');
     const form = document.getElementById('followupForm');
     modal.addEventListener('show.bs.modal', function (event) {

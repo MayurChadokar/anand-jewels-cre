@@ -131,6 +131,7 @@
             <form method="get" action="/cre/dashboard" class="cre-visit-filters d-flex flex-wrap gap-2 align-items-center">
                 <input type="hidden" name="per_page" value="{{ per_page }}">
                 <input class="form-control form-control-sm" type="search" name="q" value="{{ query }}" placeholder="Visit no., name, mobile, product" aria-label="Search by visit number, name, mobile or product" style="width: 185px;">
+                {% if is_super_admin %}<select class="form-select form-select-sm" name="store_id" aria-label="Filter by store" style="width: 165px;"><option value="0">All stores</option>{% for store in stores %}<option value="{{ store.id }}" {% if selected_store_id == store.id %}selected{% endif %}>{{ store.store_name }}</option>{% endfor %}</select>{% endif %}
                 <select class="form-select form-select-sm" name="activity" aria-label="Filter by status" style="width: 155px;">
                     <option value="">All statuses</option>
                     {% for option in visit_statuses %}<option value="{{ option }}" {% if selected_activity == option %}selected{% endif %}>{{ option }}</option>{% endfor %}
@@ -144,7 +145,7 @@
                     {% for manager_item in managers %}<option value="{{ manager_item.id }}" {% if selected_manager == manager_item.id %}selected{% endif %}>{{ manager_item.name }}</option>{% endfor %}
                 </select>
                 <button class="btn btn-sm btn-outline-danger" type="submit"><i class="bi bi-search me-1"></i>Filter</button>
-                {% if query or selected_activity or selected_sales_person or selected_manager %}<a class="btn btn-sm btn-light" href="/cre/dashboard?per_page={{ per_page }}">Clear</a>{% endif %}
+                {% if query or selected_activity or selected_store_id or selected_sales_person or selected_manager %}<a class="btn btn-sm btn-light" href="/cre/dashboard?per_page={{ per_page }}">Clear</a>{% endif %}
             </form>
         </div>
     </div>
@@ -163,8 +164,8 @@
                     <td class="ps-3 cre-customer-name"><div class="fw-semibold">{{ visit.customer_name }}</div><a class="small text-decoration-none" href="tel:{{ visit.mobile_number }}"><i class="bi bi-telephone me-1"></i>{{ visit.mobile_number }}</a></td>
                     <td class="text-nowrap"><div>{{ visit.created_at|ist('%d %b %Y') }}</div><div class="small text-muted">{{ visit.created_at|ist('%I:%M %p IST') }}</div></td>
                     <td class="small">{{ visit.store.store_name if visit.store else '-' }}</td>
-                    <td><span class="badge text-bg-light border">{{ visit.product_type.name }}</span></td>
-                    <td class="small">{{ visit.category.name if visit.category else 'Not recorded' }}</td>
+                    <td>{% if status not in ('Old Gold', 'Repair Taken', 'Repair Delivered') %}<span class="badge text-bg-light border">{{ visit.product_type.name }}</span>{% else %}<span class="text-muted">-</span>{% endif %}</td>
+                    <td class="small">{{ (visit.category.name if visit.category else 'Not Selected') if status not in ('Old Gold', 'Repair Taken', 'Repair Delivered') else '-' }}</td>
                     <td class="cre-staff-name small">{{ visit.handled_by.name if visit.handled_by else 'Not Assigned' }}</td>
                     <td class="cre-staff-name small">{{ visit.assigned_manager.name if visit.assigned_manager else 'Not Assigned' }}</td>
                     <td><span class="cre-status cre-status-{{ status_style }}"><i class="bi {{ 'bi-check-circle-fill' if status == 'Billed' else 'bi-box-arrow-right' if status == 'Walkout' else 'bi-clock' if status == 'Draft' else 'bi-circle' }}" aria-hidden="true"></i>{{ status }}</span></td>
@@ -198,8 +199,8 @@
                     <dl class="row cre-view-data mb-0">
                         <div class="col-md-6"><dt>Visit No.</dt><dd class="cre-visit-reference">{{ visit.visit_number }}</dd></div>
                         <div class="col-md-6"><dt>Mobile Number</dt><dd><a href="tel:{{ visit.mobile_number }}">{{ visit.mobile_number }}</a></dd></div>
-                        <div class="col-md-6"><dt>Product Type</dt><dd>{{ visit.product_type.name }}</dd></div>
-                        <div class="col-md-6"><dt>Category Type</dt><dd>{{ visit.category.name if visit.category else 'Not recorded' }}</dd></div>
+                        {% if visit_status(visit) not in ('Old Gold', 'Repair Taken', 'Repair Delivered') %}<div class="col-md-6"><dt>Product Type</dt><dd>{{ visit.product_type.name }}</dd></div>
+                        <div class="col-md-6"><dt>Category Type</dt><dd>{{ visit.category.name if visit.category else 'Not Selected' }}</dd></div>{% endif %}
                         <div class="col-md-6"><dt>Status</dt><dd>{{ visit_status(visit) }}</dd></div>
                         <div class="col-md-6"><dt>Store</dt><dd>{{ visit.store.store_name if visit.store else '-' }}</dd></div>
                         <div class="col-md-6"><dt>Handled By</dt><dd>{{ visit.handled_by.name if visit.handled_by else 'Not Assigned' }}</dd></div>
@@ -219,9 +220,9 @@
                         <div class="col-md-6"><label class="form-label mb-1" for="edit-name-{{ visit.id }}">Customer Name</label><input class="form-control" id="edit-name-{{ visit.id }}" name="customer_name" value="{{ visit.customer_name }}" maxlength="120" required></div>
                         <div class="col-md-6"><label class="form-label mb-1" for="edit-mobile-{{ visit.id }}">Mobile Number</label><input class="form-control" id="edit-mobile-{{ visit.id }}" name="mobile_number" type="tel" inputmode="tel" value="{{ visit.mobile_number }}" maxlength="24" required></div>
                         <div class="col-md-6"><label class="form-label mb-1" for="edit-status-{{ visit.id }}">Status</label><select class="form-select cre-edit-status" id="edit-status-{{ visit.id }}" name="status" required>{% for option in visit_statuses %}<option value="{{ option }}" {% if visit_status(visit) == option %}selected{% endif %}>{{ option }}</option>{% endfor %}</select></div>
-                        <div class="col-md-6"><label class="form-label mb-1" for="edit-store-{{ visit.id }}">Store</label><select class="form-select" id="edit-store-{{ visit.id }}" name="store_id" required><option value="">Choose store</option>{% for store in stores %}<option value="{{ store.id }}" {% if visit.store_id == store.id %}selected{% endif %}>{{ store.store_name }}</option>{% endfor %}</select></div>
-                        <div class="col-md-6"><label class="form-label mb-1" for="edit-product-{{ visit.id }}">Product Type</label><select class="form-select" id="edit-product-{{ visit.id }}" name="product_type_id" required>{% for product_type in product_types %}<option value="{{ product_type.id }}" {% if visit.product_type_id == product_type.id %}selected{% endif %}>{{ product_type.name }}</option>{% endfor %}</select></div>
-                        <div class="col-md-6"><label class="form-label mb-1" for="edit-category-{{ visit.id }}">Category</label><select class="form-select" id="edit-category-{{ visit.id }}" name="category_id" required><option value="">Choose category</option>{% for category in categories %}<option value="{{ category.id }}" {% if visit.category_id == category.id %}selected{% endif %}>{{ category.name }}</option>{% endfor %}</select></div>
+                        <div class="col-md-6"><label class="form-label mb-1">Store</label><input class="form-control" value="{{ visit.store.store_name if visit.store else 'Not assigned' }}" readonly><input type="hidden" name="store_id" value="{{ visit.store_id }}"></div>
+                        <div class="col-md-6 cre-edit-product-fields {% if visit_status(visit) in ('Old Gold', 'Repair Taken', 'Repair Delivered') %}d-none{% endif %}"><label class="form-label mb-1" for="edit-product-{{ visit.id }}">Product Type</label><select class="form-select cre-searchable-select" id="edit-product-{{ visit.id }}" name="product_type_id" data-search-placeholder="Search product type..." {% if visit_status(visit) in ('Old Gold', 'Repair Taken', 'Repair Delivered') %}disabled{% endif %}><option value="">Not Selected</option>{% for product_type in product_types %}{% if product_type.name != 'Not Selected' %}<option value="{{ product_type.id }}" {% if visit.product_type_id == product_type.id %}selected{% endif %}>{{ product_type.name }}</option>{% endif %}{% endfor %}</select></div>
+                        <div class="col-md-6 cre-edit-product-fields {% if visit_status(visit) in ('Old Gold', 'Repair Taken', 'Repair Delivered') %}d-none{% endif %}"><label class="form-label mb-1" for="edit-category-{{ visit.id }}">Category</label><select class="form-select cre-searchable-select cre-edit-category" id="edit-category-{{ visit.id }}" name="category_id" data-search-placeholder="Search category..." {% if visit_status(visit) in ('Old Gold', 'Repair Taken', 'Repair Delivered') %}disabled{% endif %}><option value="">Not Selected</option>{% for category in categories %}<option value="{{ category.id }}" {% if visit.category_id == category.id %}selected{% endif %}>{{ category.name }}</option>{% endfor %}</select></div>
                         <div class="col-md-6"><label class="form-label mb-1" for="edit-sales-{{ visit.id }}">Sales Person</label><select class="form-select" id="edit-sales-{{ visit.id }}" name="handled_by_id" required><option value="0" {% if not visit.handled_by_id %}selected{% endif %}>Not Assigned</option>{% if visit.handled_by and visit.handled_by_id not in (sales_people|map(attribute='id')|list) %}<option value="{{ visit.handled_by_id }}" selected>{{ visit.handled_by.name }} (inactive)</option>{% endif %}{% for person in sales_people %}<option value="{{ person.id }}" {% if visit.handled_by_id == person.id %}selected{% endif %}>{{ person.name }}</option>{% endfor %}</select></div>
                         <div class="col-md-6"><label class="form-label mb-1" for="edit-manager-{{ visit.id }}">Assigned Manager</label><select class="form-select" id="edit-manager-{{ visit.id }}" name="assigned_manager_id" required><option value="0" {% if not visit.assigned_manager_id %}selected{% endif %}>Not Assigned</option>{% if visit.assigned_manager and visit.assigned_manager_id not in (managers|map(attribute='id')|list) %}<option value="{{ visit.assigned_manager_id }}" selected>{{ visit.assigned_manager.name }} (inactive)</option>{% endif %}{% for manager_item in managers %}<option value="{{ manager_item.id }}" {% if visit.assigned_manager_id == manager_item.id %}selected{% endif %}>{{ manager_item.name }}</option>{% endfor %}</select></div>
                         <div class="col-md-6 cre-edit-walkout-fields {% if visit.status != 'Walkout' %}d-none{% endif %}"><label class="form-label mb-1" for="edit-walkout-reason-{{ visit.id }}">Walkout Reason</label><select class="form-select cre-edit-walkout-reason" id="edit-walkout-reason-{{ visit.id }}" name="walkout_reason"><option value="">Choose reason</option>{% if visit.walkout_reason and visit.walkout_reason not in walkout_reasons %}<option value="{{ visit.walkout_reason }}" selected>{{ visit.walkout_reason }} (removed)</option>{% endif %}{% for reason in walkout_reasons %}<option value="{{ reason }}" {% if visit.walkout_reason == reason %}selected{% endif %}>{{ reason }}</option>{% endfor %}</select></div>
@@ -264,11 +265,11 @@
                         <div class="col-md-6 cre-add-walkout-fields d-none"><label class="form-label mb-1" for="add-walkout-reason">Walkout Reason</label><select class="form-select" id="add-walkout-reason" name="walkout_reason" disabled><option value="">Choose reason</option>{% for reason in walkout_reasons %}<option value="{{ reason }}">{{ reason }}</option>{% endfor %}</select></div>
                         <div class="col-md-6 cre-add-walkout-fields d-none"><label class="form-label mb-1" for="add-competitor">Competitor Shop (optional)</label><select class="form-select" id="add-competitor" name="competitor_shop" disabled><option value="">Not recorded</option>{% for competitor in competitor_shops %}<option value="{{ competitor }}">{{ competitor }}</option>{% endfor %}</select></div>
                         <div class="col-12 cre-add-walkout-fields d-none"><label class="form-label mb-1" for="add-remark">Walkout Remark <span class="text-danger">*</span></label><textarea class="form-control" id="add-remark" name="remark" rows="2" maxlength="1000" disabled></textarea></div>
-                        <div class="col-12"><label class="form-label mb-1" for="store-id">Store</label><select class="form-select" id="store-id" name="store_id" required>{% set default_store_id = user.store_id if user.store_id in (stores|map(attribute="id")|list) else (stores[0].id if stores|length == 1 else none) %}<option value="" {% if not default_store_id %}selected{% endif %}>Choose store</option>{% for store in stores %}<option value="{{ store.id }}" {% if store.id == default_store_id %}selected{% endif %}>{{ store.store_name }}</option>{% endfor %}</select></div>
-                        <div class="col-12"><label class="form-label mb-1" for="product-type">Product Type</label><select class="form-select" id="product-type" name="product_type_id" required><option value="" {% if product_types|length != 1 %}selected{% endif %}>Choose product</option>{% for product_type in product_types %}<option value="{{ product_type.id }}" {% if product_types|length == 1 %}selected{% endif %}>{{ product_type.name }}</option>{% endfor %}</select></div>
-                        <div class="col-12"><label class="form-label mb-1" for="category-id">Category</label><select class="form-select" id="category-id" name="category_id" required><option value="">Choose category</option>{% for category in categories %}<option value="{{ category.id }}">{{ category.name }}</option>{% endfor %}</select></div>
-                        <div class="col-md-6"><label class="form-label mb-1" for="handled-by">Sales Person</label><select class="form-select" id="handled-by" name="handled_by_id" required><option value="0" {% if sales_people|length != 1 %}selected{% endif %}>Not Assigned</option>{% for person in sales_people %}<option value="{{ person.id }}" {% if sales_people|length == 1 %}selected{% endif %}>{{ person.name }}</option>{% endfor %}</select></div>
-                        <div class="col-md-6"><label class="form-label mb-1" for="assigned-manager">Manager</label><select class="form-select" id="assigned-manager" name="assigned_manager_id" required><option value="0" {% if managers|length != 1 %}selected{% endif %}>Not Assigned</option>{% for manager_item in managers %}<option value="{{ manager_item.id }}" {% if managers|length == 1 %}selected{% endif %}>{{ manager_item.name }}</option>{% endfor %}</select></div>
+                        <div class="col-12"><label class="form-label mb-1" for="store-id">Store</label>{% if is_super_admin %}<select class="form-select" id="store-id" name="store_id" required>{% set default_store_id = selected_store_id if selected_store_id else (stores[0].id if stores|length == 1 else none) %}<option value="" {% if not default_store_id %}selected{% endif %}>Choose store</option>{% for store in stores %}<option value="{{ store.id }}" {% if store.id == default_store_id %}selected{% endif %}>{{ store.store_name }}{% if store.city %} — {{ store.city }}{% endif %}</option>{% endfor %}</select>{% else %}<input class="form-control" id="store-id" value="{{ stores[0].store_name }}{% if stores[0].city %} — {{ stores[0].city }}{% endif %}" readonly><input type="hidden" name="store_id" value="{{ selected_store_id }}">{% endif %}</div>
+                        <div class="col-12 cre-add-product-fields"><label class="form-label mb-1" for="product-type">Product Type</label><select class="form-select cre-searchable-select" id="product-type" name="product_type_id" data-search-placeholder="Search product type..."><option value="" selected>Not Selected</option>{% for product_type in product_types %}{% if product_type.name != 'Not Selected' %}<option value="{{ product_type.id }}">{{ product_type.name }}</option>{% endif %}{% endfor %}</select></div>
+                        <div class="col-12 cre-add-product-fields"><label class="form-label mb-1" for="category-id">Category</label><select class="form-select cre-searchable-select" id="category-id" name="category_id" data-search-placeholder="Search category..."><option value="">Not Selected</option>{% for category in categories %}<option value="{{ category.id }}">{{ category.name }}</option>{% endfor %}</select></div>
+                        <div class="col-md-6"><label class="form-label mb-1" for="handled-by">Sales Person</label><select class="form-select" id="handled-by" name="handled_by_id" required><option value="0" selected>Not Assigned</option>{% for person in sales_people %}<option value="{{ person.id }}" data-store-id="{{ person.store_id }}">{{ person.name }}</option>{% endfor %}</select></div>
+                        <div class="col-md-6"><label class="form-label mb-1" for="assigned-manager">Manager</label><select class="form-select" id="assigned-manager" name="assigned_manager_id" required><option value="0" selected>Not Assigned</option>{% for manager_item in managers %}<option value="{{ manager_item.id }}" data-store-id="{{ manager_item.store_id }}">{{ manager_item.name }}</option>{% endfor %}</select></div>
                     </div>
                     {% if form_field_definitions %}
                     <div class="row g-2 mt-2">
@@ -308,7 +309,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (summaryLoading) return;
         summaryLoading = true;
         try {
-            const response = await fetch('/cre/dashboard/summary', {cache: 'no-store', headers: {'Accept': 'application/json'}});
+            const response = await fetch('/cre/dashboard/summary?store_id={{ selected_store_id }}', {cache: 'no-store', headers: {'Accept': 'application/json'}});
             if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) throw new Error('Summary unavailable');
             const data = await response.json();
             summary.querySelectorAll('[data-daily-count]').forEach(function (element) {
@@ -333,14 +334,163 @@ document.addEventListener('DOMContentLoaded', function () {
             if (customerName) customerName.focus();
         });
     }
+    const addStore = document.getElementById('store-id');
+    function syncAddStaff() {
+        if (!addStore || addStore.tagName !== 'SELECT') return;
+        ['handled-by', 'assigned-manager'].forEach(function (id) {
+            const select = document.getElementById(id);
+            Array.from(select.options).forEach(function (option) {
+                if (!option.dataset.storeId) return;
+                option.hidden = !addStore.value || option.dataset.storeId !== addStore.value;
+            });
+            if (select.selectedOptions[0]?.hidden) select.value = '0';
+        });
+    }
+    if (addStore && addStore.tagName === 'SELECT') {
+        addStore.addEventListener('change', syncAddStaff);
+        addCustomerModal.addEventListener('show.bs.modal', syncAddStaff);
+        syncAddStaff();
+    }
+    function enhanceSearchableSelect(select) {
+        const required = select.required;
+        const placeholderOption = Array.from(select.options).find(function (option) { return !option.value; });
+        const choices = Array.from(select.options).filter(function (option) { return option.value; });
+        const wrapper = document.createElement('div');
+        const input = document.createElement('input');
+        const searchIcon = document.createElement('i');
+        const panel = document.createElement('div');
+        const empty = document.createElement('div');
+        let activeIndex = -1;
+
+        wrapper.className = 'cre-search-select';
+        input.className = 'form-control cre-search-select-input';
+        input.type = 'text';
+        input.placeholder = select.dataset.searchPlaceholder || placeholderOption?.textContent.trim() || 'Search...';
+        input.autocomplete = 'off';
+        input.required = required;
+        input.setAttribute('role', 'combobox');
+        input.setAttribute('aria-autocomplete', 'list');
+        input.setAttribute('aria-expanded', 'false');
+        input.setAttribute('aria-controls', select.id + '-search-options');
+        searchIcon.className = 'bi bi-search cre-search-select-icon';
+        searchIcon.setAttribute('aria-hidden', 'true');
+        panel.className = 'cre-search-select-options d-none';
+        panel.id = select.id + '-search-options';
+        panel.setAttribute('role', 'listbox');
+        empty.className = 'cre-search-select-empty d-none';
+        empty.textContent = 'No matching option';
+
+        choices.forEach(function (option) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'cre-search-select-option';
+            button.dataset.value = option.value;
+            button.textContent = option.textContent.trim();
+            button.setAttribute('role', 'option');
+            button.addEventListener('click', function () { choose(button); });
+            panel.appendChild(button);
+        });
+        panel.appendChild(empty);
+        select.parentNode.insertBefore(wrapper, select);
+        wrapper.appendChild(searchIcon);
+        wrapper.appendChild(input);
+        wrapper.appendChild(panel);
+        select.hidden = true;
+        select.required = false;
+
+        function visibleOptions() {
+            return Array.from(panel.querySelectorAll('.cre-search-select-option:not(.d-none)'));
+        }
+        function setActive(index) {
+            const visible = visibleOptions();
+            visible.forEach(function (button) { button.classList.remove('active'); });
+            if (!visible.length) {
+                activeIndex = -1;
+                return;
+            }
+            activeIndex = Math.max(0, Math.min(index, visible.length - 1));
+            visible[activeIndex].classList.add('active');
+            visible[activeIndex].scrollIntoView({block: 'nearest'});
+        }
+        function open() {
+            panel.classList.remove('d-none');
+            input.setAttribute('aria-expanded', 'true');
+            setActive(0);
+        }
+        function close() {
+            panel.classList.add('d-none');
+            input.setAttribute('aria-expanded', 'false');
+            activeIndex = -1;
+        }
+        function choose(button) {
+            select.value = button.dataset.value;
+            input.value = button.textContent;
+            input.setCustomValidity('');
+            select.dispatchEvent(new Event('change', {bubbles: true}));
+            close();
+        }
+        function filter() {
+            const query = input.value.trim().toLocaleLowerCase();
+            const selected = select.options[select.selectedIndex];
+            if (!selected || selected.textContent.trim() !== input.value) select.value = '';
+            input.setCustomValidity(input.value && !select.value ? 'Please choose an option from the list.' : '');
+            let matches = 0;
+            panel.querySelectorAll('.cre-search-select-option').forEach(function (button) {
+                const match = button.textContent.toLocaleLowerCase().includes(query);
+                button.classList.toggle('d-none', !match);
+                if (match) matches += 1;
+            });
+            empty.classList.toggle('d-none', matches !== 0);
+            open();
+        }
+        function sync() {
+            const selected = select.options[select.selectedIndex];
+            input.value = selected && selected.value ? selected.textContent.trim() : '';
+            input.setCustomValidity('');
+        }
+
+        input.addEventListener('focus', function () {
+            input.select();
+            filter();
+        });
+        input.addEventListener('input', filter);
+        input.addEventListener('keydown', function (event) {
+            const visible = visibleOptions();
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                if (panel.classList.contains('d-none')) open(); else setActive(activeIndex + 1);
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                setActive(activeIndex - 1);
+            } else if (event.key === 'Enter' && !panel.classList.contains('d-none') && visible[activeIndex]) {
+                event.preventDefault();
+                choose(visible[activeIndex]);
+            } else if (event.key === 'Escape') {
+                close();
+            }
+        });
+        document.addEventListener('click', function (event) {
+            if (!wrapper.contains(event.target)) close();
+        });
+        select.form.addEventListener('reset', function () { window.setTimeout(sync); });
+        sync();
+    }
+    document.querySelectorAll('.cre-searchable-select').forEach(enhanceSearchableSelect);
     const addStatus = document.getElementById('customer-status');
     function syncAddStatus() {
         const walkout = addStatus.value === 'Walkout';
+        const productFree = ['Old Gold', 'Repair Taken', 'Repair Delivered'].includes(addStatus.value);
         addCustomerModal.querySelectorAll('.cre-add-walkout-fields').forEach(function (field) {
             field.classList.toggle('d-none', !walkout);
             field.querySelectorAll('select, textarea').forEach(function (input) {
                 input.disabled = !walkout;
                 input.required = walkout && input.name !== 'competitor_shop';
+            });
+        });
+        addCustomerModal.querySelectorAll('.cre-add-product-fields').forEach(function (field) {
+            field.classList.toggle('d-none', productFree);
+            field.querySelectorAll('select, input').forEach(function (input) {
+                input.disabled = productFree;
             });
         });
     }
@@ -359,11 +509,17 @@ document.addEventListener('DOMContentLoaded', function () {
         const remark = editForm.querySelector('.cre-edit-remark');
         const walkoutFields = editForm.querySelectorAll('.cre-edit-walkout-fields');
         const walkoutReason = editForm.querySelector('.cre-edit-walkout-reason');
+        const productFields = editForm.querySelectorAll('.cre-edit-product-fields');
         function syncEditFields() {
             const isWalkout = status.value === 'Walkout';
+            const productFree = ['Old Gold', 'Repair Taken', 'Repair Delivered'].includes(status.value);
             remark.required = isWalkout;
             walkoutFields.forEach(function (field) { field.classList.toggle('d-none', !isWalkout); });
             walkoutReason.required = isWalkout;
+            productFields.forEach(function (field) {
+                field.classList.toggle('d-none', productFree);
+                field.querySelectorAll('select').forEach(function (input) { input.disabled = productFree; });
+            });
         }
         function showEdit(show) {
             if (show) editForm.reset();

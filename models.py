@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, UniqueConstraint, CheckConstraint, Text, ForeignKey
+from sqlalchemy import Boolean, Column, Integer, String, Float, DateTime, UniqueConstraint, CheckConstraint, Text, ForeignKey
 
 from sqlalchemy.sql import func
 
@@ -44,6 +44,8 @@ class Store(Base):
     id = Column(Integer, primary_key=True, index=True)
     store_name = Column(String, nullable=False)
     city = Column(String, nullable=False, default="Indore")
+    visit_prefix = Column(String(8), nullable=True)
+    next_visit_number = Column(Integer, nullable=True, default=1)
     phone_number = Column(String, nullable=True)
     store_address = Column(Text, nullable=False)
     store_image = Column(String, nullable=True)  # URL/Path to store image
@@ -89,9 +91,12 @@ class CreStaffMember(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False, index=True)
     staff_type = Column(String(20), nullable=False, index=True)
+    store_id = Column(Integer, ForeignKey("stores.id"), nullable=True, index=True)
     created_by = Column(Integer, ForeignKey("admin_users.id"), nullable=True)
     created_at = Column(DateTime, default=func.now(), nullable=False)
     is_active = Column(Integer, nullable=False, default=1)
+
+    store = relationship("Store")
 
 class CreVisitOption(Base):
     __tablename__ = "cre_visit_options"
@@ -109,7 +114,10 @@ class CustomerVisit(Base):
 
     @property
     def visit_number(self):
-        return f'CRE-{self.id:06d}' if self.id is not None else None
+        if self.store_visit_number is None:
+            return f'CRE-{self.id:06d}' if self.id is not None else None
+        prefix = self.store.visit_prefix if self.store and self.store.visit_prefix else "CRE"
+        return f'{prefix}-{self.store_visit_number:06d}'
 
     id = Column(Integer, primary_key=True, index=True)
     customer_name = Column(String(120), nullable=False)
@@ -119,6 +127,7 @@ class CustomerVisit(Base):
     handled_by_id = Column(Integer, ForeignKey("cre_staff_members.id"), nullable=True, index=True)
     assigned_manager_id = Column(Integer, ForeignKey("cre_staff_members.id"), nullable=True, index=True)
     store_id = Column(Integer, ForeignKey("stores.id"), nullable=True, index=True)
+    store_visit_number = Column(Integer, nullable=True)
     activity_type = Column(String(40), nullable=False, index=True)
     status = Column(String(16), nullable=True, index=True)
     walkout_reason = Column(String(80), nullable=True, index=True)
@@ -137,6 +146,50 @@ class CustomerVisit(Base):
     creator = relationship("AdminUser", foreign_keys=[created_by])
     walkout_record = relationship("CreWalkoutRecord", uselist=False)
     followups = relationship("CreWalkoutFollowup", order_by="CreWalkoutFollowup.slot")
+    feedback = relationship("WalkInFeedback", back_populates="customer", uselist=False)
+
+
+class WalkInFeedback(Base):
+    __tablename__ = "walk_in_feedback"
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_visit_id = Column(Integer, ForeignKey("customer_visits.id"), nullable=False, unique=True, index=True)
+    token = Column(String(100), nullable=False, unique=True, index=True)
+    rating = Column(Integer, nullable=True)
+    comments = Column(Text, nullable=True)
+    submitted_at = Column(DateTime, nullable=True)
+    sent_to = Column(String(20), nullable=True)
+    send_status = Column(String(20), nullable=False, default="pending", index=True)
+    provider_request_id = Column(String(100), nullable=True)
+    provider_response = Column(Text, nullable=True)
+    send_attempts = Column(Integer, nullable=False, default=0)
+    sent_at = Column(DateTime, nullable=True)
+    is_read = Column(Boolean, nullable=False, default=False, index=True)
+    read_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now(), index=True)
+
+    customer = relationship("CustomerVisit", back_populates="feedback")
+    send_logs = relationship("FeedbackSendLog", back_populates="feedback")
+
+    __table_args__ = (
+        CheckConstraint("rating IS NULL OR rating BETWEEN 1 AND 5", name="ck_feedback_rating"),
+    )
+
+
+class FeedbackSendLog(Base):
+    __tablename__ = "feedback_send_logs"
+
+    id = Column(Integer, primary_key=True)
+    feedback_id = Column(Integer, ForeignKey("walk_in_feedback.id"), nullable=False, index=True)
+    requested_by = Column(String(100), nullable=True)
+    source = Column(String(30), nullable=False)
+    status = Column(String(20), nullable=False)
+    provider_request_id = Column(String(100), nullable=True)
+    provider_response = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+
+    feedback = relationship("WalkInFeedback", back_populates="send_logs")
 
 
 class CreWalkoutRecord(Base):

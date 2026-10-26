@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "_pagination.html" import pager %}
+{% block title %}Feedback - Anand Jewels CRE{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div><div class="text-uppercase small fw-semibold text-danger mb-1">Customer Relations</div><h1 class="h3 mb-1">Feedback</h1><p class="text-muted mb-0">Customer feedback and WhatsApp request status from CRE walk-ins.</p></div>
+</div>
+{% if message %}<div class="alert alert-success" role="status">{{ message }}</div>{% endif %}
+{% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+<section class="card border shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-6"><label class="form-label" for="feedback-search">Customer or mobile</label><input class="form-control" id="feedback-search" name="q" value="{{ query }}" maxlength="120" placeholder="Search feedback"></div>
+            <div class="col-md-3"><label class="form-label" for="feedback-status">Status</label><select class="form-select" id="feedback-status" name="status"><option value="all" {% if status_filter == 'all' %}selected{% endif %}>All</option><option value="submitted" {% if status_filter == 'submitted' %}selected{% endif %}>Submitted</option><option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option></select></div>
+            <div class="col-md-3 d-flex gap-2"><button class="btn btn-danger flex-grow-1" type="submit">Filter</button><a class="btn btn-outline-secondary" href="/cre/feedback">Reset</a></div>
+        </form>
+    </div>
+</section>
+<section class="card border shadow-sm">
+    <div class="card-header bg-white p-3 d-flex justify-content-between"><h2 class="h6 mb-0">Walk-in feedback</h2><span class="badge text-bg-light">{{ pagination.total }}</span></div>
+    <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Customer</th><th>Store</th><th>Rating</th><th>Comments</th><th>Visit</th><th>Submitted</th><th>Status</th><th>Source</th><th>Action</th></tr></thead><tbody>
+    {% for feedback in feedback_items %}<tr class="{% if feedback.submitted_at and not feedback.is_read %}table-warning{% endif %}">
+        <td><div class="fw-semibold">{{ feedback.customer.customer_name }}</div><a href="tel:{{ feedback.customer.mobile_number }}" class="small text-decoration-none">{{ feedback.customer.mobile_number }}</a></td>
+        <td>{{ feedback.customer.store.store_name if feedback.customer.store else '-' }}</td>
+        <td>{% if feedback.rating %}<span class="text-warning text-nowrap" aria-label="{{ feedback.rating }} out of 5 stars">{% for _ in range(feedback.rating) %}<i class="bi bi-star-fill"></i>{% endfor %}</span>{% else %}-{% endif %}</td>
+        <td style="min-width:220px">{{ feedback.comments or '-' }}</td>
+        <td class="text-nowrap"><div>{{ feedback.customer.visit_number }}</div><small class="text-muted">{{ feedback.customer.created_at|ist }}</small></td>
+        <td class="text-nowrap">{{ feedback.submitted_at|ist if feedback.submitted_at else '-' }}</td>
+        <td>{% if feedback.submitted_at %}<span class="badge text-bg-success">Submitted</span>{% elif feedback.send_status == 'queued' %}<span class="badge text-bg-info">Queued</span>{% elif feedback.send_status == 'failed' %}<span class="badge text-bg-danger">Failed</span>{% else %}<span class="badge text-bg-warning">Pending</span>{% endif %}{% if feedback.submitted_at and not feedback.is_read %}<div class="badge text-bg-danger mt-1">New</div>{% elif feedback.is_read %}<div class="small text-muted mt-1">Read</div>{% endif %}</td>
+        <td><span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">CRE Feedback</span></td>
+        <td><div class="d-flex flex-column gap-2">{% if feedback.submitted_at and not feedback.is_read %}<form method="post" action="/cre/feedback/{{ feedback.id }}/read"><button class="btn btn-sm btn-outline-secondary w-100" type="submit">Mark read</button></form>{% endif %}<form method="post" action="/cre/feedback/{{ feedback.id }}/resend"><button class="btn btn-sm btn-outline-danger w-100" type="submit" {% if feedback.submitted_at %}disabled title="Submitted feedback cannot be resent"{% endif %}>Resend</button></form></div></td>
+    </tr>{% else %}<tr><td colspan="9" class="text-center text-muted py-5">No feedback records match these filters.</td></tr>{% endfor %}
+    </tbody></table></div>
+    {{ pager(pagination, 'Feedback') }}
+</section>
+{% endblock %}

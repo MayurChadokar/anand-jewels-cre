@@ -6,6 +6,8 @@ requirements and server. `requirements.txt` lists direct dependencies;
 `requirements.lock.txt` pins the complete validated Python 3.9 environment. It does not import or connect to the main backend.
 Python 3.9 or newer is required. The included setup was checked with Python 3.9.
 
+Store-based access and final database migration are specified in `STORE_BASED_ACCESS_IMPLEMENTATION.md`.
+
 ## Start on Windows PowerShell
 
 ```powershell
@@ -73,10 +75,34 @@ For a fresh install, do not migrate; use:
 ```powershell
 .\.venv\Scripts\python.exe manage.py init-db
 .\.venv\Scripts\python.exe manage.py create-user owner --role super_admin
-.\.venv\Scripts\python.exe manage.py create-user cre_user --name "CRE Executive"
+.\.venv\Scripts\python.exe manage.py create-user cre_user --name "CRE Executive" --store-id 1
 .\.venv\Scripts\python.exe manage.py add-store "Main Store" --address "Store address" --city Indore
+.\.venv\Scripts\python.exe manage.py assign-user-store cre_user --store-id 1
+.\.venv\Scripts\python.exe manage.py add-staff "Manager Name" --type manager --store-id 1
+.\.venv\Scripts\python.exe manage.py add-staff "Sales Name" --type sales_person --store-id 1
+.\.venv\Scripts\python.exe manage.py list-store-assignments
 .\.venv\Scripts\python.exe manage.py reset-password cre_user
 ```
+
+## Final store-scoped database migration
+
+When the final updated `cre.db` is available, migrate it into a new path. The
+source is opened read-only, the destination must not exist, null historical
+assignments use the explicitly confirmed existing-store ID, and optional user
+or staff overrides can assign records to other stores.
+
+```powershell
+.\.venv\Scripts\python.exe migrate_store_database.py `
+  --source C:\path\to\updated-cre.db `
+  --destination C:\path\to\cre-store-scoped.db `
+  --existing-store-id 1 `
+  --user-store second_city_cre=2 `
+  --staff-store 25=2
+```
+
+The command preserves all tables, refuses to overwrite a destination, validates
+row counts, foreign keys and integrity, and writes a non-customer migration
+report beside the new database.
 
 Passwords are entered privately and confirmed. No default account or sample
 business data is seeded automatically. Existing migrated accounts need no reset.
@@ -85,6 +111,23 @@ products and form fields are administered through the CRE screens. Staff names
 are not login accounts, matching the extracted module's existing behavior.
 
 ## Included features
+
+## Walk-in feedback integration
+
+Every new walk-in creates one unpredictable feedback token in the same database
+transaction. The CRE Feedback screen is store-scoped and supports pending status,
+submitted ratings/comments, read state, and resend with a two-minute cooldown.
+Kit19 credentials and the Anand integration key must be supplied through the
+environment; they are never rendered into HTML.
+
+Feedback WhatsApp auto-send is enabled by default. Set
+`FEEDBACK_AUTO_SEND=false` only when the deployment must temporarily pause
+automatic messages. Manual resend remains an explicit admin action.
+
+The customer form submits JSON to `POST /api/feedback`. Anand admin can mirror CRE
+records with `GET /api/integrations/feedback`, then use the matching `/resend` and
+`/read` endpoints with an `X-Integration-Key` header. The incremental cursor uses
+both `after_time` and `after_id`; persist it only after the Anand mirror commit.
 
 Customer forms, the dashboard and walk-in reports use one **Status** field:
 Draft, Billed, Walkout, Old Gold, Repair Taken, Repair Delivered and Ordered
@@ -111,11 +154,16 @@ values are unchanged; migration from the main backend still copies only those
 six source tables, with this local configuration initialized on server startup.
 
 The sidebar opens a dedicated **Walkout Register** page at `/cre/walkout-register`,
-showing all dates by default, a full-width register, and registered/current/recovered/
+showing visits from 1 January 2026 by default, a full-width register, and registered/current/recovered/
 pending-follow-up metrics. Its Excel download contains one sheet with these exact
 columns: Visit Number, Name, Mobile, Product Type, Category Type, Sales Person,
 Meet by Manager, Walkout Reason, Status, Follow up 1, Follow up 2, Follow up 3.
 Download filters match the page filters; recovered Billed visits stay included.
+Search by customer name, mobile number, or visit reference such as `CRE-000105`.
+Search also supports a numeric visit ID and stays applied during pagination,
+follow-up edits, and Excel downloads. Clear search keeps the other filters.
+While searching, date filters are ignored across the page and Excel export;
+without search text, date filters apply normally.
 The register's Edit popup permits only Status, Walkout Reason, and Competitor.
 Customer identity, product/category, staff assignment, remarks, and follow-ups
 remain unchanged by this edit. The latest reason/competitor are retained in

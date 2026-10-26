@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#8f2030">
+    <title>Customer Feedback | Anand Jewels</title>
+    <style>
+        :root { --wine:#8f2030; --wine-dark:#671521; --gold:#bd9450; --ink:#352b30; --muted:#7c7076; --line:#eadfe1; --paper:#fffdfb; }
+        * { box-sizing:border-box; }
+        body { margin:0; min-height:100vh; display:grid; place-items:center; padding:24px; color:var(--ink); font-family:Inter,Arial,sans-serif; background:radial-gradient(circle at top right,#f3e3d1 0,transparent 32%),linear-gradient(145deg,#f8f2ef,#fffdfb 55%,#f1e8e4); }
+        .card { width:min(100%,620px); overflow:hidden; border:1px solid rgba(143,32,48,.12); border-radius:24px; background:rgba(255,253,251,.96); box-shadow:0 24px 70px rgba(83,43,51,.14); }
+        .hero { position:relative; padding:30px 34px 28px; color:#fff; text-align:center; background:linear-gradient(135deg,var(--wine-dark),var(--wine)); }
+        .hero:after { content:""; position:absolute; inset:auto -45px -90px auto; width:190px; height:190px; border:1px solid rgba(255,255,255,.12); border-radius:50%; box-shadow:0 0 0 32px rgba(255,255,255,.04); }
+        .logo { width:84px; height:68px; object-fit:contain; padding:5px; border-radius:14px; background:#fff; }
+        h1 { margin:17px 0 8px; font-family:Georgia,serif; font-size:clamp(1.8rem,5vw,2.45rem); font-weight:400; }
+        .hero p { margin:0 auto; max-width:440px; color:#f1dfe3; line-height:1.6; }
+        form,.result { padding:32px 34px 36px; }
+        .eyebrow { margin-bottom:8px; color:var(--wine); font-size:.74rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+        .question { margin:0; font-size:1.08rem; font-weight:700; }
+        .hint { margin:7px 0 0; color:var(--muted); font-size:.88rem; line-height:1.5; }
+        .stars { display:flex; flex-direction:row-reverse; justify-content:flex-end; gap:6px; margin:18px 0 30px; }
+        .stars input { position:absolute; opacity:0; pointer-events:none; }
+        .stars label { cursor:pointer; color:#d9ced0; font-size:2.5rem; line-height:1; transition:transform .15s,color .15s; }
+        .stars label:before { content:"\2605"; }
+        .stars label:hover,.stars label:hover~label,.stars input:checked~label { color:var(--gold); }
+        .stars label:hover { transform:translateY(-2px) scale(1.06); }
+        .stars input:focus-visible+label { outline:3px solid rgba(189,148,80,.35); outline-offset:4px; border-radius:4px; }
+        label[for="comments"] { display:block; margin-bottom:9px; font-weight:700; }
+        textarea { width:100%; min-height:130px; resize:vertical; padding:14px 15px; color:var(--ink); font:inherit; line-height:1.5; border:1px solid var(--line); border-radius:12px; background:#fff; }
+        textarea:focus { outline:none; border-color:var(--wine); box-shadow:0 0 0 4px rgba(143,32,48,.09); }
+        .counter { margin-top:6px; color:var(--muted); text-align:right; font-size:.78rem; }
+        button { width:100%; min-height:51px; margin-top:22px; border:0; border-radius:12px; color:#fff; font-size:1rem; font-weight:800; background:linear-gradient(135deg,var(--wine),#b53345); cursor:pointer; box-shadow:0 10px 24px rgba(143,32,48,.2); }
+        button:hover { background:linear-gradient(135deg,var(--wine-dark),var(--wine)); }
+        button:disabled { cursor:wait; opacity:.65; }
+        .notice { margin:0 34px 30px; padding:13px 15px; border-radius:11px; font-size:.9rem; line-height:1.45; }
+        .notice.error { color:#85202d; border:1px solid #efc7cc; background:#fff0f2; }
+        .result { text-align:center; }
+        .result-icon { display:grid; place-items:center; width:66px; height:66px; margin:0 auto 18px; border-radius:50%; color:#fff; font-size:2rem; background:#238558; }
+        .result h2 { margin:0 0 10px; font-family:Georgia,serif; font-size:2rem; }
+        .result p { margin:0; color:var(--muted); line-height:1.65; }
+        .hidden { display:none !important; }
+        @media (max-width:520px) { body{padding:0;background:var(--paper)} .card{min-height:100vh;border:0;border-radius:0} .hero{padding:24px 22px} form,.result{padding:28px 22px} .notice{margin:0 22px 24px} .stars{justify-content:center} }
+    </style>
+</head>
+<body>
+<main class="card">
+    <header class="hero"><img class="logo" src="/static/images/logo.png" alt="Anand Jewels"><h1>Share your experience</h1><p>Your feedback helps us make every visit more memorable.</p></header>
+    <div id="notice" class="notice error hidden" role="alert"></div>
+    <form id="feedbackForm" novalidate>
+        <div class="eyebrow">Customer feedback</div>
+        <p class="question">How was your recent visit?</p><p class="hint">Select a rating from 1 to 5 stars.</p>
+        <div class="stars" aria-label="Rating">
+            <input id="star5" name="rating" type="radio" value="5"><label for="star5" title="Excellent"></label>
+            <input id="star4" name="rating" type="radio" value="4"><label for="star4" title="Very good"></label>
+            <input id="star3" name="rating" type="radio" value="3"><label for="star3" title="Good"></label>
+            <input id="star2" name="rating" type="radio" value="2"><label for="star2" title="Fair"></label>
+            <input id="star1" name="rating" type="radio" value="1"><label for="star1" title="Poor"></label>
+        </div>
+        <label for="comments">Tell us more <span class="hint">(optional)</span></label>
+        <textarea id="comments" maxlength="2000" placeholder="What did you enjoy, or how can we improve?"></textarea><div class="counter"><span id="count">0</span>/2000</div>
+        <button id="submitButton" type="submit">Submit feedback</button>
+    </form>
+    <section id="success" class="result hidden" aria-live="polite"><div class="result-icon">&#10003;</div><h2>Thank you</h2><p>Your feedback has been submitted successfully.<br>We appreciate your time.</p></section>
+</main>
+<script>
+const token = new URLSearchParams(window.location.search).get('token');
+const form = document.getElementById('feedbackForm');
+const notice = document.getElementById('notice');
+const comments = document.getElementById('comments');
+const button = document.getElementById('submitButton');
+comments.addEventListener('input', () => document.getElementById('count').textContent = comments.value.length);
+function showError(message) { notice.textContent = message; notice.classList.remove('hidden'); notice.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+if (!token) { showError('This feedback link is missing its secure token. Please use the complete link from WhatsApp.'); form.classList.add('hidden'); }
+form.addEventListener('submit', async (event) => {
+    event.preventDefault(); notice.classList.add('hidden');
+    const rating = form.querySelector('input[name="rating"]:checked');
+    if (!rating) { showError('Please select a rating before submitting.'); return; }
+    button.disabled = true; button.textContent = 'Submitting...';
+    try {
+        const response = await fetch('/api/feedback', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,rating:Number(rating.value),comments:comments.value})});
+        const result = await response.json();
+        if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : 'Unable to submit feedback.');
+        form.classList.add('hidden'); document.getElementById('success').classList.remove('hidden');
+    } catch (error) { showError(error.message || 'Unable to submit feedback. Please try again.'); button.disabled=false; button.textContent='Submit feedback'; }
+});
+</script>
+</body>
+</html>
