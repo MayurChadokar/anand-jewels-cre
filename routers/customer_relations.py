@@ -143,6 +143,18 @@ def _staff_query(db, staff_type, store_id=0, active_only=True):
     return query
 
 
+def _claim_store_visit_number(db, store_id):
+    updated = db.execute(sql_text(
+        "UPDATE stores SET next_visit_number=COALESCE(next_visit_number, 1) + 1 "
+        "WHERE id=:store_id"
+    ), {"store_id": store_id})
+    if updated.rowcount != 1:
+        raise ValueError("Store was not found.")
+    return db.execute(sql_text(
+        "SELECT next_visit_number - 1 FROM stores WHERE id=:store_id"
+    ), {"store_id": store_id}).scalar_one()
+
+
 def _pagination_meta(total, page, request, page_key='page', tab=None, per_page=PAGE_SIZE):
     pages = max(1, math.ceil(total / per_page))
     page = min(page, pages)
@@ -1363,10 +1375,7 @@ def add_customer_visit(
     store = db.query(Store).filter(Store.id == store_id).first()
     if not store:
         return RedirectResponse(_panel_url(error="Select a valid store."), status_code=303)
-    store_visit_number = db.execute(sql_text(
-        "UPDATE stores SET next_visit_number=COALESCE(next_visit_number, 1) + 1 "
-        "WHERE id=:store_id RETURNING next_visit_number - 1"
-    ), {"store_id": store.id}).scalar_one()
+    store_visit_number = _claim_store_visit_number(db, store.id)
 
     form_fields = db.query(CustomerFormField).filter(
         CustomerFormField.is_active == 1

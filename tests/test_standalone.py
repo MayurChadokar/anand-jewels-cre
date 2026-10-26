@@ -22,7 +22,7 @@ from urllib.request import build_opener, HTTPCookieProcessor, Request
 
 import bcrypt
 from openpyxl import load_workbook
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
 from database import Base
@@ -128,6 +128,28 @@ class MigrationTests(unittest.TestCase):
             migrate_store_database(self.source, self.target, 1)
 
 class DashboardSummaryTests(unittest.TestCase):
+    def test_visit_number_claim_avoids_returning_for_legacy_sqlite(self):
+        from routers.customer_relations import _claim_store_visit_number
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'visit-number.db'
+            fixture(path)
+            engine = create_engine('sqlite:///' + path.as_posix())
+            statements = []
+            event.listen(
+                engine,
+                'before_cursor_execute',
+                lambda connection, cursor, statement, parameters, context, executemany:
+                    statements.append(statement),
+            )
+            try:
+                with Session(engine) as db:
+                    self.assertEqual(_claim_store_visit_number(db, 1), 1)
+                    self.assertEqual(_claim_store_visit_number(db, 1), 2)
+                    db.commit()
+                self.assertFalse(any('RETURNING' in statement.upper() for statement in statements))
+            finally:
+                engine.dispose()
+
     def test_ist_display_converts_utc_and_aware_timestamps(self):
         from datetime_utils import format_ist, INDIA_TIME
         expected='22 Oct 2026, 12:30 AM IST'
