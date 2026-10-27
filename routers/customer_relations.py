@@ -1114,6 +1114,26 @@ def public_feedback_form(request: Request):
     return templates.TemplateResponse("feedback_form.html", {"request": request})
 
 
+@router.get("/api/feedback/{token}")
+def get_feedback_details(token: str, db: Session = Depends(get_db)):
+    feedback = db.query(WalkInFeedback).options(
+        joinedload(WalkInFeedback.customer).joinedload(CustomerVisit.store),
+        joinedload(WalkInFeedback.customer).joinedload(CustomerVisit.product_type),
+    ).filter(WalkInFeedback.token == token).first()
+    if not feedback:
+        raise HTTPException(status_code=404, detail="Feedback link is invalid")
+
+    customer = feedback.customer
+    return {
+        "customer_name": customer.customer_name,
+        "mobile_number": customer.mobile_number,
+        "store_name": customer.store.store_name if customer.store else None,
+        "visit_number": customer.visit_number,
+        "product_type": customer.product_type.name if customer.product_type else None,
+        "submitted": feedback.submitted_at is not None,
+    }
+
+
 @router.post("/api/feedback", status_code=201)
 def submit_feedback(payload: FeedbackSubmission, db: Session = Depends(get_db)):
     feedback = db.query(WalkInFeedback).filter(WalkInFeedback.token == payload.token).first()
