@@ -7,6 +7,7 @@
 </div>
 {% if message %}<div class="alert alert-success" role="status">{{ message }}</div>{% endif %}
 {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+{% if not feedback_auto_send %}<div class="alert alert-info" role="status">Automatic feedback sending is off. Use <strong>Send feedback link</strong> for pending customers.</div>{% endif %}
 <section class="card border shadow-sm mb-4">
     <div class="card-body">
         <form method="get" class="row g-3 align-items-end">
@@ -26,9 +27,9 @@
         <td style="min-width:220px">{{ feedback.comments or '-' }}</td>
         <td class="text-nowrap"><div>{{ feedback.customer.visit_number }}</div><small class="text-muted">{{ feedback.customer.created_at|ist }}</small></td>
         <td class="text-nowrap">{{ feedback.submitted_at|ist if feedback.submitted_at else '-' }}</td>
-        <td>{% if feedback.submitted_at %}<span class="badge text-bg-success">Submitted</span>{% elif feedback.send_status == 'queued' %}<span class="badge text-bg-info">Queued</span>{% elif feedback.send_status == 'failed' %}<span class="badge text-bg-danger">Failed</span>{% else %}<span class="badge text-bg-warning">Pending</span>{% endif %}{% if feedback.submitted_at and not feedback.is_read %}<div class="badge text-bg-danger mt-1">New</div>{% elif feedback.is_read %}<div class="small text-muted mt-1">Read</div>{% endif %}</td>
+        <td>{% if feedback.submitted_at %}<span class="badge text-bg-success">Submitted</span>{% elif feedback.send_status == 'queued' %}<span class="badge text-bg-info">Queued</span>{% elif feedback.send_status == 'processing' %}<span class="badge text-bg-primary">Processing</span>{% elif feedback.send_status == 'failed' %}<span class="badge text-bg-danger">Failed</span>{% else %}<span class="badge text-bg-warning">Scheduled</span>{% endif %}{% if feedback.next_attempt_at %}<div class="small text-muted mt-1">Retry {{ feedback.next_attempt_at|ist }}</div>{% elif feedback.scheduled_at and not feedback.sent_at %}<div class="small text-muted mt-1">{{ feedback.scheduled_at|ist }}</div>{% endif %}{% if feedback.submitted_at and not feedback.is_read %}<div class="badge text-bg-danger mt-1">New</div>{% elif feedback.is_read %}<div class="small text-muted mt-1">Read</div>{% endif %}</td>
         <td><span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">CRE Feedback</span></td>
-        <td><div class="d-flex flex-column gap-2">{% if feedback.submitted_at and not feedback.is_read %}<form method="post" action="/cre/feedback/{{ feedback.id }}/read"><button class="btn btn-sm btn-outline-secondary w-100" type="submit">Mark read</button></form>{% endif %}<form method="post" action="/cre/feedback/{{ feedback.id }}/resend"><button class="btn btn-sm btn-outline-danger w-100" type="submit" {% if feedback.submitted_at %}disabled title="Submitted feedback cannot be resent"{% endif %}>Resend</button></form></div></td>
+        <td><div class="d-flex flex-column gap-2">{% if feedback.submitted_at and not feedback.is_read %}<form method="post" action="/cre/feedback/{{ feedback.id }}/read"><button class="btn btn-sm btn-outline-secondary w-100" type="submit">Mark read</button></form>{% endif %}<form method="post" action="/cre/feedback/{{ feedback.id }}/resend"><button class="btn btn-sm btn-outline-danger w-100" type="submit" {% if feedback.submitted_at %}disabled title="Submitted feedback cannot be resent"{% endif %}>{% if feedback.submitted_at %}Submitted{% elif feedback.send_attempts %}Resend feedback link{% else %}Send feedback link{% endif %}</button></form></div></td>
     </tr>{% else %}<tr><td colspan="9" class="text-center text-muted py-5">No feedback records match these filters.</td></tr>{% endfor %}
     </tbody></table></div>
     {{ pager(pagination, 'Feedback') }}

@@ -1,10 +1,7 @@
 from datetime import datetime, timedelta
 
 from fastapi import HTTPException
-from sqlalchemy.orm import joinedload
-
-from database import SessionLocal
-from models import FeedbackSendLog, WalkInFeedback
+from models import FeedbackSendLog
 from services.feedback_whatsapp import send_feedback_whatsapp
 
 
@@ -22,6 +19,10 @@ def send_feedback(db, feedback, requested_by, source, enforce_cooldown=True):
         feedback.provider_request_id = result["provider_request_id"] or None
         feedback.provider_response = result["provider_response"]
         feedback.sent_at = attempted_at
+        feedback.scheduled_at = None
+        feedback.next_attempt_at = None
+        feedback.processing_started_at = None
+        feedback.last_error = None
         feedback.updated_at = attempted_at
         feedback.send_attempts += 1
         db.add(FeedbackSendLog(
@@ -36,8 +37,11 @@ def send_feedback(db, feedback, requested_by, source, enforce_cooldown=True):
         return result
     except Exception as error:
         attempted_at = datetime.utcnow()
-        feedback.send_status = "failed"
+        # A scheduled record remains eligible for the durable worker after a
+        # failed manual attempt; unscheduled/manual-only records stay failed.
+        feedback.send_status = "pending" if feedback.scheduled_at else "failed"
         feedback.provider_response = str(error)[:4000]
+        feedback.last_error = str(error)[:4000]
         feedback.updated_at = attempted_at
         feedback.send_attempts += 1
         db.add(FeedbackSendLog(
@@ -49,16 +53,3 @@ def send_feedback(db, feedback, requested_by, source, enforce_cooldown=True):
         ))
         db.commit()
         raise
-
-
-def send_walk_in_feedback_link(feedback_id: int):
-    with SessionLocal() as db:
-        feedback = db.query(WalkInFeedback).options(
-            joinedload(WalkInFeedback.customer)
-        ).filter(WalkInFeedback.id == feedback_id).first()
-        if not feedback:
-            return
-        try:
-            send_feedback(db, feedback, requested_by=None, source="automatic", enforce_cooldown=False)
-        except Exception:
-            return

@@ -33,3 +33,5 @@ def init_db():
     migrate_006_store_visit_numbers(engine)
     from product_selection import migrate_007_optional_product_selection
     migrate_007_optional_product_selection(engine)
+    from feedback_schedule import migrate_008_feedback_schedule
+    migrate_008_feedback_schedule(engine)

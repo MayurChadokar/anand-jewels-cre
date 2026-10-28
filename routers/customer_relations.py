@@ -9,7 +9,7 @@ from io import BytesIO
 from typing import Optional
 from urllib.parse import quote, urlencode, urlsplit, parse_qsl
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
@@ -35,9 +35,9 @@ from auth import (
 )
 from database import get_db
 from dependencies.integration_auth import require_integration_key
-from settings import FEEDBACK_AUTO_SEND, TEMPLATE_DIR
+from settings import FEEDBACK_AUTO_SEND, FEEDBACK_SEND_DELAY_HOURS, TEMPLATE_DIR
 from models import CreVisitOption, CreWalkoutFollowup, CustomerProductCategory, AdminUser, CreStaffMember, CustomerFormField, CustomerProductType, CustomerVisit, Store, UserRole, WalkInFeedback
-from services.feedback import send_feedback, send_walk_in_feedback_link
+from services.feedback import send_feedback
 from walkout_followups import remember_walkout
 from datetime_utils import INDIA_TIME, format_ist
 from auth import get_current_user_web
@@ -1199,6 +1199,7 @@ def feedback_dashboard(
         pagination=pagination,
         status_filter=status_filter,
         query=q,
+        feedback_auto_send=FEEDBACK_AUTO_SEND,
         message=message,
         error=error,
     )
@@ -1272,6 +1273,8 @@ def list_feedback_for_sync(
         "rating": row.rating,
         "comments": row.comments,
         "send_status": row.send_status,
+        "scheduled_at": row.scheduled_at.isoformat() if row.scheduled_at else None,
+        "next_attempt_at": row.next_attempt_at.isoformat() if row.next_attempt_at else None,
         "is_read": row.is_read,
         "submitted_at": row.submitted_at.isoformat() if row.submitted_at else None,
         "updated_at": row.updated_at.isoformat(),
@@ -1331,7 +1334,6 @@ def mark_integration_feedback_read(feedback_id: int, db: Session = Depends(get_d
 @router.post("/cre/customers")
 def add_customer_visit(
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: AdminUser = Depends(require_customer_relations_access),
     form: FormData = Depends(_read_form),
@@ -1447,12 +1449,12 @@ def add_customer_visit(
         customer_visit_id=visit.id,
         token=secrets.token_urlsafe(32),
         send_status="pending",
+        scheduled_at=datetime.utcnow() + timedelta(hours=FEEDBACK_SEND_DELAY_HOURS),
     )
     db.add(feedback)
     db.commit()
     if FEEDBACK_AUTO_SEND:
-        background_tasks.add_task(send_walk_in_feedback_link, feedback.id)
-        message = f"Visit {visit.visit_number} saved successfully. Feedback WhatsApp is being queued."
+        message = f"Visit {visit.visit_number} saved successfully. Feedback WhatsApp is scheduled."
     else:
         message = f"Visit {visit.visit_number} saved successfully. Feedback is ready to send."
     return RedirectResponse(_panel_url(message=message), status_code=303)

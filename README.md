@@ -124,10 +124,41 @@ Feedback WhatsApp auto-send is enabled by default. Set
 `FEEDBACK_AUTO_SEND=false` only when the deployment must temporarily pause
 automatic messages. Manual resend remains an explicit admin action.
 
-The customer form submits JSON to `POST /api/feedback`. Anand admin can mirror CRE
-records with `GET /api/integrations/feedback`, then use the matching `/resend` and
-`/read` endpoints with an `X-Integration-Key` header. The incremental cursor uses
-both `after_time` and `after_id`; persist it only after the Anand mirror commit.
+Automatic feedback delivery is durable and delayed. Each new walk-in stores a
+`scheduled_at` value (five hours by default); it is not sent by the web request.
+Run exactly one scheduler worker alongside the web application:
+
+```bash
+python -m scripts.feedback_worker
+```
+
+The worker checks every 30 seconds, sends each due Kit19 request individually,
+recovers abandoned `processing` records, and retries provider failures after 5,
+15, 30, and 60 minutes up to the configured attempt limit. Configure it with:
+
+```dotenv
+FEEDBACK_SEND_DELAY_HOURS=5
+FEEDBACK_WORKER_INTERVAL_SECONDS=30
+FEEDBACK_MAX_ATTEMPTS=5
+FEEDBACK_PROCESSING_TIMEOUT_MINUTES=15
+```
+
+For a deployment smoke test, `python -m scripts.feedback_worker --once` processes
+one due batch and exits. Because this release uses SQLite, deploy a single worker
+process and configure the process manager to restart it on failure. Stop both the
+web process and worker before taking a file-level `data/cre.db` backup. Run
+`python manage.py init-db` once after deploying the code; migration 008 adds only
+the scheduling columns and index and preserves existing feedback rows. Existing
+unscheduled rows are not auto-sent. Rollback is: stop the worker, set
+`FEEDBACK_AUTO_SEND=false`, and restore the verified pre-deployment database and
+previous application version if a schema rollback is required.
+
+The customer form loads customer, mobile number, and visit context from
+`GET /api/feedback/{token}`, then submits JSON to `POST /api/feedback`. Anand
+admin can mirror CRE records with `GET /api/integrations/feedback`, then use the
+matching `/resend` and `/read` endpoints with an `X-Integration-Key` header. The
+incremental cursor uses both `after_time` and `after_id`; persist it only after
+the Anand mirror commit.
 
 Customer forms, the dashboard and walk-in reports use one **Status** field:
 Draft, Billed, Walkout, Old Gold, Repair Taken, Repair Delivered and Ordered
