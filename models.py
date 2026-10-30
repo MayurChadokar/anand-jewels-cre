@@ -130,6 +130,7 @@ class CustomerVisit(Base):
     id = Column(Integer, primary_key=True, index=True)
     customer_name = Column(String(120), nullable=False)
     mobile_number = Column(String(24), nullable=False, index=True)
+    mobile_number_normalized = Column(String(15), nullable=True, index=True)
     product_type_id = Column(Integer, ForeignKey("customer_product_types.id"), nullable=False)
     category_id = Column(Integer, ForeignKey('customer_product_categories.id'), nullable=True)
     handled_by_id = Column(Integer, ForeignKey("cre_staff_members.id"), nullable=True, index=True)

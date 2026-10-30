@@ -41,6 +41,7 @@ from services.feedback import send_feedback
 from walkout_followups import remember_walkout
 from datetime_utils import INDIA_TIME, format_ist
 from auth import get_current_user_web
+from customer_deduplication import normalize_mobile
 
 
 async def _read_form(request: Request):
@@ -1362,6 +1363,15 @@ def add_customer_visit(
         return RedirectResponse(_panel_url(error="Enter the customer's name."), status_code=303)
     if not re.fullmatch(r"\+?[\d\s().-]+", mobile_number) or len(digits) < 7 or len(digits) > 15:
         return RedirectResponse(_panel_url(error="Enter a valid mobile number."), status_code=303)
+    normalized_mobile = normalize_mobile(mobile_number)
+    recent_visit = db.query(CustomerVisit.id).filter(
+        CustomerVisit.mobile_number_normalized == normalized_mobile,
+        CustomerVisit.created_at >= datetime.utcnow() - timedelta(hours=24),
+    ).first()
+    if recent_visit:
+        return RedirectResponse(_panel_url(
+            error="This mobile number already has a customer entry in the last 24 hours."
+        ), status_code=303)
     product_free = activity_type in PRODUCT_FREE_STATUSES
     product_type = _product_selection(db, "" if product_free else product_type_id)
     if not product_type:
@@ -1432,6 +1442,7 @@ def add_customer_visit(
     visit = CustomerVisit(
         customer_name=customer_name[:120],
         mobile_number=mobile_number[:24],
+        mobile_number_normalized=normalized_mobile,
         product_type_id=product_type.id,
         category_id=category.id if category else None,
         handled_by_id=handled_by.id if handled_by else None,
@@ -1446,17 +1457,25 @@ def add_customer_visit(
         custom_fields=json.dumps(custom_values, ensure_ascii=False),
         created_by=current_user.id,
     )
-    db.add(visit)
-    remember_walkout(db, visit)
-    db.flush()
-    feedback = WalkInFeedback(
-        customer_visit_id=visit.id,
-        token=secrets.token_urlsafe(32),
-        send_status="pending",
-        scheduled_at=datetime.utcnow() + timedelta(hours=FEEDBACK_SEND_DELAY_HOURS),
-    )
-    db.add(feedback)
-    db.commit()
+    try:
+        db.add(visit)
+        remember_walkout(db, visit)
+        db.flush()
+        feedback = WalkInFeedback(
+            customer_visit_id=visit.id,
+            token=secrets.token_urlsafe(32),
+            send_status="pending",
+            scheduled_at=datetime.utcnow() + timedelta(hours=FEEDBACK_SEND_DELAY_HOURS),
+        )
+        db.add(feedback)
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        if "duplicate_mobile_24h" in str(error.orig):
+            return RedirectResponse(_panel_url(
+                error="This mobile number already has a customer entry in the last 24 hours."
+            ), status_code=303)
+        raise
     if FEEDBACK_AUTO_SEND:
         message = f"Visit {visit.visit_number} saved successfully. Feedback WhatsApp is scheduled."
     else:
@@ -1525,6 +1544,16 @@ def edit_customer_visit(
         return RedirectResponse(_panel_url(error="Enter a customer name up to 120 characters."), status_code=303)
     if len(mobile_number) > 24 or not re.fullmatch(r"\+?[\d\s().-]+", mobile_number) or not 7 <= len(digits) <= 15:
         return RedirectResponse(_panel_url(error="Enter a valid mobile number."), status_code=303)
+    normalized_mobile = normalize_mobile(mobile_number)
+    recent_duplicate = db.query(CustomerVisit.id).filter(
+        CustomerVisit.id != visit.id,
+        CustomerVisit.mobile_number_normalized == normalized_mobile,
+        CustomerVisit.created_at >= datetime.utcnow() - timedelta(hours=24),
+    ).first()
+    if recent_duplicate:
+        return RedirectResponse(_panel_url(
+            error="This mobile number already has a customer entry in the last 24 hours."
+        ), status_code=303)
 
     try:
         activity_type, status = resolve_visit_status(db, form)
@@ -1622,6 +1651,7 @@ def edit_customer_visit(
     remember_walkout(db, visit)
     visit.customer_name = customer_name
     visit.mobile_number = mobile_number
+    visit.mobile_number_normalized = normalized_mobile
     visit.product_type_id = product_type.id
     visit.category_id = category.id if category else None
     visit.handled_by_id = handled_by.id if handled_by else None

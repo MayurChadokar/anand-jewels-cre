@@ -37,3 +37,5 @@ def init_db():
     migrate_008_feedback_schedule(engine)
     from visit_statuses import migrate_009_visit_status_master
     migrate_009_visit_status_master(engine)
+    from customer_deduplication import migrate_010_customer_deduplication
+    migrate_010_customer_deduplication(engine)

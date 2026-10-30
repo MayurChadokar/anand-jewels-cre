@@ -255,7 +255,7 @@
 <div class="modal fade cre-add-customer-modal cre-visit-modal" id="addCustomerModal" tabindex="-1" aria-labelledby="addCustomerTitle" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
         <div class="modal-content border-0 shadow">
-            <form method="post" action="/cre/customers">
+            <form id="addCustomerForm" method="post" action="/cre/customers">
                 <div class="modal-header"><div><div class="text-uppercase small fw-semibold text-danger mb-1"><i class="bi bi-person-plus me-1" aria-hidden="true"></i>New customer visit</div><h2 class="modal-title h5" id="addCustomerTitle">Add Walk-in Customer</h2><small class="text-muted">A warm welcome starts with the right details.</small></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
                 <div class="modal-body">
                     <div class="row g-2">
@@ -287,7 +287,7 @@
                     </div>
                     {% endif %}
                 </div>
-                <div class="modal-footer cre-customer-submit-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button><button class="btn btn-danger" type="submit"><i class="bi bi-person-plus me-1"></i>Add Walk-in Customer</button></div>
+                <div class="modal-footer cre-customer-submit-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button><button class="btn btn-danger" type="submit" data-add-customer-submit><i class="bi bi-person-plus me-1"></i>Add Walk-in Customer</button></div>
             </form>
         </div>
     </div>
@@ -328,6 +328,14 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!document.hidden) refreshSummary();
     });
     const addCustomerModal = document.getElementById('addCustomerModal');
+    const addCustomerForm = document.getElementById('addCustomerForm');
+    if (addCustomerForm) addCustomerForm.addEventListener('submit', function () {
+        const button = addCustomerForm.querySelector('[data-add-customer-submit]');
+        if (button) {
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Saving...';
+        }
+    });
     if (addCustomerModal) {
         addCustomerModal.addEventListener('shown.bs.modal', function () {
             const customerName = document.getElementById('customer-name');
