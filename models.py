@@ -85,6 +85,14 @@ class CustomerProductCategory(Base):
     created_by = Column(Integer, ForeignKey('admin_users.id'), nullable=True)
     created_at = Column(DateTime, default=func.now(), nullable=False)
 
+class CustomerVisitStatus(Base):
+    __tablename__ = "customer_visit_statuses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(40, collation="NOCASE"), unique=True, nullable=False, index=True)
+    created_by = Column(Integer, ForeignKey("admin_users.id"), nullable=True)
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+
 class CreStaffMember(Base):
     __tablename__ = "cre_staff_members"
 

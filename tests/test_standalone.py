@@ -77,7 +77,7 @@ class MigrationTests(unittest.TestCase):
             self.assertEqual(live.execute('SELECT count(*) FROM admin_users').fetchone()[0],4)
         with closing(sqlite3.connect(str(self.target))) as db:
             tables={row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-            self.assertEqual(tables,{'stores','admin_users','customer_product_types','customer_form_fields','cre_staff_members','customer_visits','cre_visit_options','cre_walkout_records','cre_walkout_followups','customer_product_categories','walk_in_feedback','feedback_send_logs'})
+            self.assertEqual(tables,{'stores','admin_users','customer_product_types','customer_form_fields','cre_staff_members','customer_visits','cre_visit_options','cre_walkout_records','cre_walkout_followups','customer_product_categories','customer_visit_statuses','walk_in_feedback','feedback_send_logs'})
             self.assertEqual(db.execute('SELECT customer_name FROM customer_visits').fetchone()[0],'Committed WAL')
             self.assertEqual(db.execute('SELECT id FROM admin_users ORDER BY id').fetchall(),[(1,),(2,),(4,)])
             self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
@@ -409,6 +409,7 @@ class WebTests(unittest.TestCase):
         public_form = self.request('/feedback.html?utm_src=cre&token=local-test-token')[1]
         self.assertIn(b'Customer Feedback | Anand Jewels', public_form)
         self.assertIn(b"fetch('/api/feedback'", public_form)
+        self.assertIn(b'fetch(`/api/feedback/${encodeURIComponent(token)}`)', public_form)
         self.assertIn(b'local-test-token', self.request('/feedback.html?token=local-test-token')[2].encode())
         self.login()
         first_name = 'Feedback first store'
@@ -430,6 +431,19 @@ class WebTests(unittest.TestCase):
         self.assertEqual(len({row[1] for row in feedback_rows}), 2)
         self.assertTrue(all(len(row[1]) >= 40 and row[2] == 'pending' for row in feedback_rows))
         first_id, token = feedback_rows[0][:2]
+        feedback_page = self.request('/cre/feedback')[1]
+        self.assertIn(b'Automatic feedback sending is off', feedback_page)
+        self.assertIn(b'Send feedback link', feedback_page)
+
+        status, details = self.api(f'/api/feedback/{token}')
+        self.assertEqual(status, 200)
+        self.assertEqual(details['customer_name'], first_name)
+        self.assertEqual(details['mobile_number'], '9876543210')
+        self.assertEqual(details['store_name'], 'Test Store')
+        self.assertEqual(details['product_type'], 'Ring')
+        self.assertTrue(details['visit_number'].startswith('CRE-'))
+        self.assertFalse(details['submitted'])
+        self.assertEqual(self.api('/api/feedback/missing-token-value')[0], 404)
 
         self.assertEqual(self.api('/api/feedback', {'token': token, 'rating': 0})[0], 422)
         self.assertEqual(self.api('/api/feedback', {'token': token, 'rating': 6})[0], 422)
@@ -449,6 +463,7 @@ class WebTests(unittest.TestCase):
         self.assertEqual(status, 201)
         self.assertEqual(result['feedback_id'], first_id)
         self.assertEqual(self.api('/api/feedback', {'token': token, 'rating': 4})[0], 409)
+        self.assertTrue(self.api(f'/api/feedback/{token}')[1]['submitted'])
         self.assertEqual(self.sql(
             'SELECT rating,comments,send_status,is_read FROM walk_in_feedback WHERE id=?', (first_id,)
         ), [(5, 'Excellent service', 'submitted', 0)])

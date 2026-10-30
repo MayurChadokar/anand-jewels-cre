@@ -36,7 +36,7 @@ from auth import (
 from database import get_db
 from dependencies.integration_auth import require_integration_key
 from settings import FEEDBACK_AUTO_SEND, FEEDBACK_SEND_DELAY_HOURS, TEMPLATE_DIR
-from models import CreVisitOption, CreWalkoutFollowup, CustomerProductCategory, AdminUser, CreStaffMember, CustomerFormField, CustomerProductType, CustomerVisit, Store, UserRole, WalkInFeedback
+from models import CreVisitOption, CreWalkoutFollowup, CustomerProductCategory, CustomerVisitStatus, AdminUser, CreStaffMember, CustomerFormField, CustomerProductType, CustomerVisit, Store, UserRole, WalkInFeedback
 from services.feedback import send_feedback
 from walkout_followups import remember_walkout
 from datetime_utils import INDIA_TIME, format_ist
@@ -72,7 +72,12 @@ def display_visit_status(visit):
     return visit.activity_type
 
 
-def resolve_visit_status(form):
+def visit_status_names(db):
+    custom = db.query(CustomerVisitStatus.name).order_by(func.lower(CustomerVisitStatus.name)).all()
+    return (*VISIT_STATUSES, *(name for (name,) in custom if name not in VISIT_STATUSES))
+
+
+def resolve_visit_status(db, form):
     value = str(form.get("status", "")).strip()
     # Accept older clients while all current forms use a single Status field.
     if not value:
@@ -82,11 +87,13 @@ def resolve_visit_status(form):
         value = "Draft" if activity == "New Jewellery" else activity
     if value == "Registered":
         value = "Draft"
-    if value not in VISIT_STATUSES:
+    if value not in visit_status_names(db):
         raise ValueError("Choose a valid status.")
     if value in ACTIVITY_TYPES[1:]:
         return value, None
-    return "New Jewellery", value
+    if value in ("Draft", "Billed", "Walkout"):
+        return "New Jewellery", value
+    return value, None
 
 
 def walkout_values(db, form, status, visit=None):
@@ -703,7 +710,7 @@ def cre_dashboard(
     if activity in ("Draft", "Billed", "Walkout"):
         visits_query = visits_query.filter(CustomerVisit.activity_type == "New Jewellery",
                                            CustomerVisit.status == activity)
-    elif activity in ACTIVITY_TYPES:
+    elif activity in visit_status_names(db):
         visits_query = visits_query.filter(CustomerVisit.activity_type == activity)
     if sales_person:
         visits_query = visits_query.filter(CustomerVisit.handled_by_id == sales_person)
@@ -750,7 +757,7 @@ def cre_dashboard(
         sales_people=sales_people,
         managers=managers,
         activity_types=ACTIVITY_TYPES,
-        visit_statuses=VISIT_STATUSES,
+        visit_statuses=visit_status_names(db),
         new_jewellery_statuses=NEW_JEWELLERY_STATUSES,
         walkout_reasons=option_names(db, "reason"),
         competitor_shops=option_names(db, "competitor"),
@@ -1342,7 +1349,7 @@ def add_customer_visit(
     mobile_number = str(form.get("mobile_number", "")).strip()
     product_type_id = form.get("product_type_id", "")
     try:
-        activity_type, status = resolve_visit_status(form)
+        activity_type, status = resolve_visit_status(db, form)
         remark, walkout_reason, competitor_shop = walkout_values(db, form, status)
     except ValueError as error:
         return RedirectResponse(_panel_url(error=str(error)), status_code=303)
@@ -1355,9 +1362,6 @@ def add_customer_visit(
         return RedirectResponse(_panel_url(error="Enter the customer's name."), status_code=303)
     if not re.fullmatch(r"\+?[\d\s().-]+", mobile_number) or len(digits) < 7 or len(digits) > 15:
         return RedirectResponse(_panel_url(error="Enter a valid mobile number."), status_code=303)
-    if activity_type not in ACTIVITY_TYPES:
-        return RedirectResponse(_panel_url(error="Choose a valid customer activity."), status_code=303)
-
     product_free = activity_type in PRODUCT_FREE_STATUSES
     product_type = _product_selection(db, "" if product_free else product_type_id)
     if not product_type:
@@ -1476,7 +1480,7 @@ def update_new_jewellery_status(
     if visit.status == 'Billed':
         return RedirectResponse(_panel_url(error='Billed entries are locked. Details and status cannot be changed.'), status_code=303)
     try:
-        activity_type, stored_status = resolve_visit_status({"status": status})
+        activity_type, stored_status = resolve_visit_status(db, {"status": status})
         remark, walkout_reason, competitor_shop = walkout_values(db, {
             "remark": remark, "walkout_reason": walkout_reason,
             "competitor_shop": competitor_shop}, stored_status, visit)
@@ -1523,7 +1527,7 @@ def edit_customer_visit(
         return RedirectResponse(_panel_url(error="Enter a valid mobile number."), status_code=303)
 
     try:
-        activity_type, status = resolve_visit_status(form)
+        activity_type, status = resolve_visit_status(db, form)
     except ValueError as error:
         return RedirectResponse(_panel_url(error=str(error)), status_code=303)
 
@@ -1969,6 +1973,50 @@ def products_page(
         "cre_products.html", request, current_user,
         products=products, categories=db.query(CustomerProductCategory).order_by(CustomerProductCategory.name).all(), message=message, error=error,
     )
+
+
+@router.get("/cre/statuses", response_class=HTMLResponse)
+def statuses_page(
+    request: Request,
+    message: str = Query(default="", max_length=120),
+    error: str = Query(default="", max_length=160),
+    db: Session = Depends(get_db),
+    current_user: AdminUser = Depends(require_cre_manager_access),
+):
+    return _render_cre_page(
+        "cre_statuses.html", request, current_user,
+        core_statuses=VISIT_STATUSES,
+        statuses=db.query(CustomerVisitStatus).order_by(
+            func.lower(CustomerVisitStatus.name)
+        ).all(),
+        message=message,
+        error=error,
+    )
+
+
+@router.post("/cre/statuses")
+def add_status(
+    name: str = Form(..., max_length=40),
+    db: Session = Depends(get_db),
+    current_user: AdminUser = Depends(require_cre_manager_access),
+):
+    name = " ".join(name.split())
+    path = "/cre/statuses"
+    if not name:
+        return RedirectResponse(_panel_url(error="Enter a status name.", path=path), status_code=303)
+    if name.casefold() in {status.casefold() for status in VISIT_STATUSES}:
+        return RedirectResponse(_panel_url(error="That status already exists.", path=path), status_code=303)
+    if db.query(CustomerVisitStatus).filter(
+        func.lower(CustomerVisitStatus.name) == name.lower()
+    ).first():
+        return RedirectResponse(_panel_url(error="That status already exists.", path=path), status_code=303)
+    db.add(CustomerVisitStatus(name=name, created_by=current_user.id))
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return RedirectResponse(_panel_url(error="That status already exists.", path=path), status_code=303)
+    return RedirectResponse(_panel_url(message="Status added to the customer form.", path=path), status_code=303)
 
 
 @router.post("/cre/products")
