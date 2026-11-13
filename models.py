@@ -137,7 +137,7 @@ class CustomerVisit(Base):
     assigned_manager_id = Column(Integer, ForeignKey("cre_staff_members.id"), nullable=True, index=True)
     store_id = Column(Integer, ForeignKey("stores.id"), nullable=True, index=True)
     store_visit_number = Column(Integer, nullable=True)
-    activity_type = Column(String(40), nullable=False, index=True)
+    activity_type  = Column(String(40), nullable=False, index=True)
     status = Column(String(16), nullable=True, index=True)
     walkout_reason = Column(String(80), nullable=True, index=True)
     competitor_shop = Column(String(100), nullable=True, index=True)
