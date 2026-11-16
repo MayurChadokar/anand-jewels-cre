@@ -1265,6 +1265,58 @@ def export_submitted_feedback_excel(
     )
 
 
+@router.get("/cre/feedback/export/not-submitted/excel")
+def export_not_submitted_feedback_excel(
+    q: str = Query(default="", max_length=120),
+    db: Session = Depends(get_db),
+    current_user: AdminUser = Depends(require_customer_relations_access),
+):
+    query = db.query(WalkInFeedback).options(
+        joinedload(WalkInFeedback.customer).joinedload(CustomerVisit.store),
+        joinedload(WalkInFeedback.customer).joinedload(CustomerVisit.product_type),
+    ).join(WalkInFeedback.customer).filter(WalkInFeedback.submitted_at.is_(None))
+    query = _scope_visits(query, current_user)
+    if q.strip():
+        term = f"%{q.strip()}%"
+        query = query.filter(or_(
+            CustomerVisit.customer_name.ilike(term),
+            CustomerVisit.mobile_number.ilike(term),
+        ))
+
+    feedback_items = query.order_by(
+        WalkInFeedback.sent_at.desc(),
+        WalkInFeedback.created_at.desc(),
+        WalkInFeedback.id.desc(),
+    ).all()
+    rows = []
+    for feedback in feedback_items:
+        customer = feedback.customer
+        rows.append([
+            feedback.id,
+            customer.customer_name,
+            customer.mobile_number,
+            customer.store.store_name if customer.store else "",
+            customer.visit_number,
+            format_ist(customer.created_at),
+            customer.product_type.name if customer.product_type else "",
+            format_ist(feedback.sent_at) if feedback.sent_at else "",
+            feedback.send_status.replace("_", " ").title(),
+            feedback.send_attempts,
+        ])
+
+    filename = f"cre-not-submitted-feedback-{datetime.now(INDIA_TIME).date().isoformat()}.xlsx"
+    return _section_excel_response(
+        "Not Submitted Feedback",
+        [
+            "Feedback ID", "Customer", "Mobile", "Store", "Visit No.",
+            "Visit date (IST)", "Product Type", "WhatsApp sent at (IST)",
+            "Send Status", "Send Attempts",
+        ],
+        rows,
+        filename,
+    )
+
+
 @router.post("/cre/feedback/{feedback_id}/read")
 def mark_cre_feedback_read(
     feedback_id: int,
